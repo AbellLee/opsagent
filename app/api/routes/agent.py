@@ -8,13 +8,12 @@ from langchain_core.messages import HumanMessage, AIMessage, ToolMessage, System
 
 from app.api.deps import get_db
 from app.core.logger import logger
-from app.agent.graph import agent_graph
 
 from typing import Dict, Any
 from langchain_core.messages import ToolMessage, AIMessage
 from langgraph.graph import StateGraph, END, MessagesState
-from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
-from langgraph.store.postgres.aio import AsyncPostgresStore
+from langgraph.checkpoint.postgres import PostgresSaver
+from langgraph.store.postgres import PostgresStore
 from app.agent.graph import route_tools
 from app.agent.graph import call_model
 from app.agent.graph import should_continue
@@ -82,7 +81,6 @@ class AgentExecuteRequest(BaseModel):
 async def execute_agent(
     session_id: UUID,
     request: AgentExecuteRequest,
-    db = Depends(get_db)
 ):
     """执行Agent任务"""
     try:
@@ -130,9 +128,9 @@ async def chat_with_agent(
 ):
     """与Agent聊天（支持连续对话）"""
     try:
-        async with (
-            AsyncPostgresStore.from_conn_string(settings.database_url) as store,
-            AsyncPostgresSaver.from_conn_string(settings.database_url) as checkpointer,
+        with (
+            PostgresStore.from_conn_string(settings.database_url) as store,
+            PostgresSaver.from_conn_string(settings.database_url) as checkpointer,
         ):
             builder  = StateGraph(MessagesState)
 
