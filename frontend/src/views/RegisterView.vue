@@ -73,7 +73,7 @@ import {
   NText,
   useMessage
 } from 'naive-ui'
-import axios from 'axios'
+import { userAPI } from '../api'
 
 const message = useMessage()
 const router = useRouter()
@@ -136,13 +136,13 @@ const handleRegister = async (e) => {
     await registerFormRef.value.validate()
     
     // 调用后端注册API
-    const response = await axios.post('http://localhost:8000/api/users', {
+    const response = await userAPI.register({
       username: registerForm.value.username,
       email: registerForm.value.email,
       password: registerForm.value.password
     })
     
-    userStore.login(response.data, 'placeholder_token_' + Date.now())
+    userStore.login(response, 'placeholder_token_' + Date.now())
     message.success('注册成功')
     router.push('/')
   } catch (error) {

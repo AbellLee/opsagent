@@ -59,7 +59,7 @@ import {
   NText,
   useMessage
 } from 'naive-ui'
-import axios from 'axios'
+import { userAPI } from '../api'
 
 const message = useMessage()
 const router = useRouter()
@@ -97,13 +97,13 @@ const handleLogin = async (e) => {
     await loginFormRef.value.validate()
     
     // 调用后端登录API
-    const response = await axios.post('http://localhost:8000/api/users/login', {
+    const response = await userAPI.login({
       username: loginForm.value.username,
       email: loginForm.value.username, // 同时传递用户名和邮箱字段
       password: loginForm.value.password
     })
     
-    userStore.login(response.data.user, response.data.token)
+    userStore.login(response.user || response, response.token)
     message.success('登录成功')
     router.push('/')
   } catch (error) {

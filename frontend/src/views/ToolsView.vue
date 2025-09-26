@@ -16,7 +16,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, h } from 'vue'
 import { 
   NCard, 
   NButton, 
@@ -24,7 +24,7 @@ import {
   NDataTable,
   useMessage
 } from 'naive-ui'
-import axios from 'axios'
+import { toolAPI } from '../api'
 
 const message = useMessage()
 const loading = ref(false)
@@ -61,8 +61,8 @@ const columns = [
 const loadTools = async () => {
   loading.value = true
   try {
-    const response = await axios.get('http://localhost:8000/api/tools')
-    tools.value = response.data.map(tool => ({
+    const response = await toolAPI.list()
+    tools.value = response.map(tool => ({
       ...tool,
       type: tool.type || 'Custom'
     }))

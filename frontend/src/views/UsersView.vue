@@ -1,54 +1,316 @@
 <template>
-  <div style="padding: 20px">
-    <n-card title="用户管理">
-      <n-descriptions label-placement="left" bordered>
-        <n-descriptions-item label="用户ID">
-          {{ userStore.userProfile.user_id }}
-        </n-descriptions-item>
-        <n-descriptions-item label="用户名">
-          {{ userStore.userProfile.username }}
-        </n-descriptions-item>
-        <n-descriptions-item label="邮箱">
-          {{ userStore.userProfile.email }}
-        </n-descriptions-item>
-        <n-descriptions-item label="创建时间">
-          {{ formatDate(userStore.userProfile.created_at) }}
-        </n-descriptions-item>
-        <n-descriptions-item label="更新时间">
-          {{ formatDate(userStore.userProfile.updated_at) }}
-        </n-descriptions-item>
-      </n-descriptions>
-      
-      <n-space style="margin-top: 20px">
-        <n-button @click="logout">退出登录</n-button>
-      </n-space>
+  <div style="padding: 20px; display: flex; justify-content: center; align-items: center; height: 100%;">
+    <n-card style="width: 600px; max-width: 90vw;">
+      <n-tabs type="line" animated>
+        <n-tab-pane name="login" tab="用户登录">
+          <n-form
+            :model="loginForm"
+            :rules="loginRules"
+            ref="loginFormRef"
+          >
+            <n-form-item label="用户名/邮箱" path="username">
+              <n-input 
+                v-model:value="loginForm.username" 
+                placeholder="请输入用户名或邮箱"
+              />
+            </n-form-item>
+            <n-form-item label="密码" path="password">
+              <n-input 
+                v-model:value="loginForm.password" 
+                type="password"
+                placeholder="请输入密码"
+                show-password-on="click"
+              />
+            </n-form-item>
+            <n-form-item>
+              <n-button 
+                type="primary" 
+                @click="handleLogin"
+                :loading="loginLoading"
+                style="width: 100%"
+              >
+                登录
+              </n-button>
+            </n-form-item>
+          </n-form>
+          
+          <div style="text-align: center; margin-top: 20px;">
+            <n-text>还没有账户？</n-text>
+            <n-button text type="primary" @click="switchToRegister">立即注册</n-button>
+          </div>
+        </n-tab-pane>
+        
+        <n-tab-pane name="register" tab="用户注册">
+          <n-form
+            :model="registerForm"
+            :rules="registerRules"
+            ref="registerFormRef"
+          >
+            <n-form-item label="用户名" path="username">
+              <n-input 
+                v-model:value="registerForm.username" 
+                placeholder="请输入用户名"
+              />
+            </n-form-item>
+            <n-form-item label="邮箱" path="email">
+              <n-input 
+                v-model:value="registerForm.email" 
+                placeholder="请输入邮箱"
+              />
+            </n-form-item>
+            <n-form-item label="密码" path="password">
+              <n-input 
+                v-model:value="registerForm.password" 
+                type="password"
+                placeholder="请输入密码"
+                show-password-on="click"
+              />
+            </n-form-item>
+            <n-form-item label="确认密码" path="confirmPassword">
+              <n-input 
+                v-model:value="registerForm.confirmPassword" 
+                type="password"
+                placeholder="请再次输入密码"
+                show-password-on="click"
+              />
+            </n-form-item>
+            <n-form-item>
+              <n-button 
+                type="primary" 
+                @click="handleRegister"
+                :loading="registerLoading"
+                style="width: 100%"
+              >
+                注册
+              </n-button>
+            </n-form-item>
+          </n-form>
+          
+          <div style="text-align: center; margin-top: 20px;">
+            <n-text>已有账户？</n-text>
+            <n-button text type="primary" @click="switchToLogin">立即登录</n-button>
+          </div>
+        </n-tab-pane>
+        
+        <n-tab-pane name="profile" tab="个人信息" v-if="isLoggedIn">
+          <n-descriptions label-placement="left" bordered>
+            <n-descriptions-item label="用户ID">
+              {{ userProfile.user_id }}
+            </n-descriptions-item>
+            <n-descriptions-item label="用户名">
+              {{ userProfile.username }}
+            </n-descriptions-item>
+            <n-descriptions-item label="邮箱">
+              {{ userProfile.email }}
+            </n-descriptions-item>
+            <n-descriptions-item label="创建时间">
+              {{ formatDate(userProfile.created_at) }}
+            </n-descriptions-item>
+            <n-descriptions-item label="更新时间">
+              {{ formatDate(userProfile.updated_at) }}
+            </n-descriptions-item>
+          </n-descriptions>
+          
+          <n-space style="margin-top: 20px">
+            <n-button @click="logout">退出登录</n-button>
+          </n-space>
+        </n-tab-pane>
+      </n-tabs>
     </n-card>
   </div>
 </template>
 
 <script setup>
+import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '../stores/user'
 import { 
   NCard, 
+  NTabs, 
+  NTabPane, 
+  NForm, 
+  NFormItem, 
+  NInput, 
+  NButton, 
   NSpace,
-  NButton,
   NDescriptions,
-  NDescriptionsItem
+  NDescriptionsItem,
+  useMessage
 } from 'naive-ui'
+import { userAPI } from '../api'
 
+const message = useMessage()
 const router = useRouter()
 const userStore = useUserStore()
+
+// 登录表单
+const loginFormRef = ref()
+const loginForm = ref({
+  username: '',
+  password: ''
+})
+
+const loginRules = {
+  username: {
+    required: true,
+    message: '请输入用户名或邮箱',
+    trigger: 'blur'
+  },
+  password: {
+    required: true,
+    message: '请输入密码',
+    trigger: 'blur'
+  }
+}
+
+// 注册表单
+const registerFormRef = ref()
+const registerForm = ref({
+  username: '',
+  email: '',
+  password: '',
+  confirmPassword: ''
+})
+
+const registerRules = {
+  username: {
+    required: true,
+    message: '请输入用户名',
+    trigger: 'blur'
+  },
+  email: [
+    {
+      required: true,
+      message: '请输入邮箱',
+      trigger: 'blur'
+    },
+    {
+      type: 'email',
+      message: '请输入正确的邮箱格式',
+      trigger: 'blur'
+    }
+  ],
+  password: {
+    required: true,
+    message: '请输入密码',
+    trigger: 'blur'
+  },
+  confirmPassword: {
+    required: true,
+    message: '请再次输入密码',
+    trigger: 'blur',
+    validator: (rule, value) => {
+      if (value !== registerForm.value.password) {
+        return new Error('两次输入的密码不一致')
+      }
+      return true
+    }
+  }
+}
+
+// 状态管理
+const loginLoading = ref(false)
+const registerLoading = ref(false)
+const isLoggedIn = ref(false)
+const userProfile = ref({})
+
+// 处理登录
+const handleLogin = async (e) => {
+  e.preventDefault()
+  loginLoading.value = true
+  
+  try {
+    await loginFormRef.value.validate()
+    
+    // 调用后端登录API
+    const response = await userAPI.login({
+      username: loginForm.value.username,
+      email: loginForm.value.username, // 同时传递用户名和邮箱字段
+      password: loginForm.value.password
+    })
+    
+    const userData = response.user || response
+    const token = response.token || 'placeholder_token_' + Date.now()
+    
+    userStore.login(userData, token)
+    userProfile.value = userData
+    isLoggedIn.value = true
+    
+    message.success('登录成功')
+    router.push('/')
+  } catch (error) {
+    console.error('登录失败:', error)
+    message.error('登录失败: ' + (error.response?.data?.detail || error.message))
+  } finally {
+    loginLoading.value = false
+  }
+}
+
+// 处理注册
+const handleRegister = async (e) => {
+  e.preventDefault()
+  registerLoading.value = true
+  
+  try {
+    await registerFormRef.value.validate()
+    
+    // 调用后端注册API
+    const response = await userAPI.register({
+      username: registerForm.value.username,
+      email: registerForm.value.email,
+      password: registerForm.value.password
+    })
+    
+    userStore.login(response, 'placeholder_token_' + Date.now())
+    userProfile.value = response
+    isLoggedIn.value = true
+    
+    message.success('注册成功')
+    router.push('/')
+  } catch (error) {
+    console.error('注册失败:', error)
+    message.error('注册失败: ' + (error.response?.data?.detail || error.message))
+  } finally {
+    registerLoading.value = false
+  }
+}
+
+// 切换到注册标签
+const switchToRegister = () => {
+  const tabsEl = document.querySelector('.n-tabs')
+  if (tabsEl) {
+    tabsEl.setAttribute('data-name', 'register')
+  }
+}
+
+// 切换到登录标签
+const switchToLogin = () => {
+  const tabsEl = document.querySelector('.n-tabs')
+  if (tabsEl) {
+    tabsEl.setAttribute('data-name', 'login')
+  }
+}
 
 // 退出登录
 const logout = () => {
   userStore.logout()
+  isLoggedIn.value = false
+  userProfile.value = {}
   router.push('/login')
 }
 
 // 格式化日期
 const formatDate = (dateString) => {
   if (!dateString) return ''
-  return new Date(dateString).toLocaleString()
+  const date = new Date(dateString)
+  return date.toLocaleString('zh-CN')
 }
+
+onMounted(() => {
+  // 检查用户是否已登录
+  if (userStore.isAuthenticated && userStore.userProfile) {
+    userProfile.value = userStore.userProfile
+    isLoggedIn.value = true
+  }
+})
 </script>

@@ -24,7 +24,7 @@ import {
   NDataTable,
   useMessage
 } from 'naive-ui'
-import axios from 'axios'
+import { approvalAPI } from '../api'
 
 const message = useMessage()
 const loading = ref(false)
@@ -71,8 +71,8 @@ const columns = [
 const loadApprovals = async () => {
   loading.value = true
   try {
-    const response = await axios.get('http://localhost:8000/api/approvals')
-    approvals.value = response.data
+    const response = await approvalAPI.list()
+    approvals.value = response
   } catch (error) {
     message.error('加载审批列表失败: ' + error.message)
   } finally {
@@ -83,7 +83,7 @@ const loadApprovals = async () => {
 // 批准请求
 const approveRequest = async (approval) => {
   try {
-    await axios.post(`http://localhost:8000/api/approvals/${approval.id}/approve`)
+    await approvalAPI.approve(approval.id)
     message.success('已批准工具执行')
     loadApprovals() // 刷新列表
   } catch (error) {
@@ -94,7 +94,7 @@ const approveRequest = async (approval) => {
 // 拒绝请求
 const rejectRequest = async (approval) => {
   try {
-    await axios.post(`http://localhost:8000/api/approvals/${approval.id}/reject`)
+    await approvalAPI.reject(approval.id)
     message.success('已拒绝工具执行')
     loadApprovals() // 刷新列表
   } catch (error) {
