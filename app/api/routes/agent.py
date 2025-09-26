@@ -14,7 +14,7 @@ from langchain_core.messages import ToolMessage, AIMessage
 from langgraph.graph import StateGraph, END, MessagesState
 from langgraph.checkpoint.postgres import PostgresSaver
 from langgraph.store.postgres import PostgresStore
-from app.agent.graph import route_tools
+from app.agent.graph import route_tools, graph_builder
 from app.agent.graph import call_model
 from app.agent.graph import should_continue
 from app.core.config import settings
@@ -132,28 +132,7 @@ async def chat_with_agent(
             PostgresStore.from_conn_string(settings.database_url) as store,
             PostgresSaver.from_conn_string(settings.database_url) as checkpointer,
         ):
-            builder  = StateGraph(MessagesState)
-
-            # 添加节点
-            builder.add_node("agent", call_model)
-            builder.add_node("tools", route_tools)
-            
-            # 设置入口点
-            builder.set_entry_point("agent")
-            
-            # 添加条件边，根据should_continue函数的返回值决定下一步
-            builder.add_conditional_edges(
-                "agent",
-                should_continue,
-                {
-                    "tools": "tools",
-                    "end": END
-                }
-            )
-            
-            # 工具执行后返回agent节点继续处理
-            builder.add_edge("tools", "agent")
-            graph = builder.compile(
+            graph = graph_builder.compile(
                 checkpointer=checkpointer,
                 store=store,
             )

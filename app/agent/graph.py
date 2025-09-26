@@ -1,9 +1,13 @@
 from typing import Dict, Any
 from langchain_core.messages import ToolMessage, AIMessage
-from langgraph.graph import MessagesState
+from langgraph.graph import StateGraph, END, MessagesState
+from langgraph.checkpoint.postgres import PostgresSaver
+from langgraph.store.postgres import PostgresStore
 from app.agent.model import qwen_model
 from app.agent.tools import tool_manager
+from app.core.config import settings
 from app.core.logger import logger
+import os
 
 # 定义节点函数
 def call_model(state: MessagesState) -> Dict[str, Any]:
@@ -71,3 +75,44 @@ def route_tools(state: MessagesState) -> Dict[str, Any]:
             return {"messages": [AIMessage(content=f"工具执行失败: {str(e)}")]}
     
     return {"messages": []}
+
+# 构建图
+def create_agent_graph():
+    """创建Agent图"""
+
+    with (
+        PostgresStore.from_conn_string(settings.database_url) as store,
+        PostgresSaver.from_conn_string(settings.database_url) as checkpointer,
+    ):
+        builder  = StateGraph(MessagesState)
+
+        # 添加节点
+        builder.add_node("agent", call_model)
+        builder.add_node("tools", route_tools)
+        
+        # 设置入口点
+        builder.set_entry_point("agent")
+        
+        # 添加条件边，根据should_continue函数的返回值决定下一步
+        builder.add_conditional_edges(
+            "agent",
+            should_continue,
+            {
+                "tools": "tools",
+                "end": END
+            }
+        )
+        
+        # 工具执行后返回agent节点继续处理
+        builder.add_edge("tools", "agent")
+        graph = builder.compile(
+            checkpointer=checkpointer,
+            store=store,
+        )
+    
+    return graph
+    
+   
+
+# 创建全局Agent图实例
+agent_graph = create_agent_graph()
