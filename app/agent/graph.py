@@ -1,13 +1,9 @@
 from typing import Dict, Any
 from langchain_core.messages import ToolMessage, AIMessage
 from langgraph.graph import StateGraph, END, MessagesState
-from langgraph.checkpoint.postgres import PostgresSaver
-from langgraph.store.postgres import PostgresStore
 from app.agent.model import qwen_model
 from app.agent.tools import tool_manager
-from app.core.config import settings
 from app.core.logger import logger
-import os
 
 # 定义节点函数
 def call_model(state: MessagesState) -> Dict[str, Any]:
