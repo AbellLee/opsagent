@@ -1,0 +1,28 @@
+{
+  "name": "opsagent-frontend",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "serve": "vue-cli-service serve",
+    "build": "vue-cli-service build",
+    "lint": "vue-cli-service lint"
+  },
+  "dependencies": {
+    "vue": "^3.4.0",
+    "vue-router": "^4.0.0",
+    "pinia": "^2.0.0",
+    "naive-ui": "^2.34.0",
+    "axios": "^1.6.0"
+  },
+  "devDependencies": {
+    "@vue/cli-plugin-router": "^5.0.0",
+    "@vue/cli-plugin-vuex": "^5.0.0",
+    "@vue/cli-service": "^5.0.0",
+    "@vue/compiler-sfc": "^3.4.0"
+  },
+  "browserslist": [
+    "> 1%",
+    "last 2 versions",
+    "not dead"
+  ]
+}
