@@ -77,42 +77,33 @@ def route_tools(state: MessagesState) -> Dict[str, Any]:
     return {"messages": []}
 
 # 构建图
-def create_agent_graph():
-    """创建Agent图"""
+def create_builder():
+    """创建 builder 图"""
+    builder  = StateGraph(MessagesState)
 
-    with (
-        PostgresStore.from_conn_string(settings.database_url) as store,
-        PostgresSaver.from_conn_string(settings.database_url) as checkpointer,
-    ):
-        builder  = StateGraph(MessagesState)
-
-        # 添加节点
-        builder.add_node("agent", call_model)
-        builder.add_node("tools", route_tools)
-        
-        # 设置入口点
-        builder.set_entry_point("agent")
-        
-        # 添加条件边，根据should_continue函数的返回值决定下一步
-        builder.add_conditional_edges(
-            "agent",
-            should_continue,
-            {
-                "tools": "tools",
-                "end": END
-            }
-        )
-        
-        # 工具执行后返回agent节点继续处理
-        builder.add_edge("tools", "agent")
-        graph = builder.compile(
-            checkpointer=checkpointer,
-            store=store,
-        )
+    # 添加节点
+    builder.add_node("agent", call_model)
+    builder.add_node("tools", route_tools)
     
-    return graph
+    # 设置入口点
+    builder.set_entry_point("agent")
+    
+    # 添加条件边，根据should_continue函数的返回值决定下一步
+    builder.add_conditional_edges(
+        "agent",
+        should_continue,
+        {
+            "tools": "tools",
+            "end": END
+        }
+    )
+    
+    # 工具执行后返回agent节点继续处理
+    builder.add_edge("tools", "agent")
+
+    return builder
     
    
 
 # 创建全局Agent图实例
-agent_graph = create_agent_graph()
+graph_builder = create_builder()
