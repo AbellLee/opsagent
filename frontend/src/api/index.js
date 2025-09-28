@@ -39,7 +39,10 @@ apiClient.interceptors.response.use(
 // 用户相关 API
 export const userAPI = {
   login: (credentials) => apiClient.post('/users/login', credentials),
-  register: (userData) => apiClient.post('/users/register', userData)
+  register: (userData) => apiClient.post('/users', userData),
+  getProfile: (userId) => apiClient.get(`/users/${userId}`),
+  updateProfile: (userId, userData) => apiClient.put(`/users/profile`, userData),
+  listUsers: () => apiClient.get('/users/list')  // 调试用接口
 }
 
 // 会话相关 API

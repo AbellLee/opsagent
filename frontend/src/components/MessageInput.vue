@@ -1,33 +1,48 @@
 <template>
-  <div class="message-input-container">
-    <n-input
-      ref="inputRef"
-      v-model:value="inputValue"
-      type="textarea"
-      :autosize="{ minRows: 1, maxRows: 6 }"
-      :placeholder="PLACEHOLDER_TEXT"
-      class="message-textarea"
-      @keydown="handleKeyDown"
-    />
-    <div class="send-button-container">
-      <n-button 
-        type="primary" 
-        circle
-        size="small"
-        @click="sendMessage"
-        :disabled="isSendDisabled"
-        :loading="sending"
-        class="send-button"
-        :aria-label="SEND_BUTTON_LABEL"
-      >
-        <template #icon>
-          <n-icon>
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M3 20V4L17 11L10 13L3 20ZM5 16.05L11.5 13.5L15.5 15.5L5 19.05V16.05ZM11.5 10.5L5 7.95V10.95L15.5 14.5L11.5 10.5Z"/>
-            </svg>
-          </n-icon>
-        </template>
-      </n-button>
+  <div class="message-input-wrapper">
+    <div class="input-container">
+      <!-- 输入框 -->
+      <div class="textarea-wrapper">
+        <n-input
+          ref="inputRef"
+          v-model:value="inputValue"
+          type="textarea"
+          :autosize="{ minRows: 1, maxRows: 6 }"
+          :placeholder="placeholder"
+          :maxlength="maxLength"
+          :show-count="false"
+          class="message-textarea"
+          @keydown="handleKeyDown"
+        />
+
+        <!-- 发送按钮 -->
+        <div class="send-button-wrapper">
+          <n-button
+            type="primary"
+            circle
+            size="medium"
+            @click="sendMessage"
+            :disabled="isSendDisabled"
+            :loading="sending"
+            class="send-button"
+          >
+            <template #icon>
+              <n-icon size="18">
+                <svg viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M2,21L23,12L2,3V10L17,12L2,14V21Z"/>
+                </svg>
+              </n-icon>
+            </template>
+          </n-button>
+        </div>
+      </div>
+
+      <!-- 字数统计 -->
+      <div class="char-count-wrapper">
+        <span class="char-count" :class="{ warning: isNearLimit, error: isOverLimit }">
+          {{ inputValue.length }}/{{ maxLength }}
+        </span>
+      </div>
     </div>
   </div>
 </template>
@@ -39,8 +54,6 @@ import { messageAPI } from '../api'
 import { createDiscreteApi } from 'naive-ui'
 
 // Constants
-const PLACEHOLDER_TEXT = '有什么我能帮您的吗？'
-const SEND_BUTTON_LABEL = '发送消息'
 const MESSAGE_ROLE = {
   USER: 'user',
   ASSISTANT: 'assistant'
@@ -58,13 +71,26 @@ const inputValue = ref('')
 const sending = ref(false)
 const inputRef = ref(null)
 
+// Configuration
+const maxLength = ref(2000)
+const placeholder = ref('有什么我能帮您的吗？')
+
 // Computed properties
 const isSendDisabled = computed(() => {
-  return !inputValue.value?.trim() || sending.value
+  return !inputValue.value?.trim() || sending.value || isOverLimit.value
+})
+
+const isNearLimit = computed(() => {
+  return inputValue.value.length > maxLength.value * 0.8
+})
+
+const isOverLimit = computed(() => {
+  return inputValue.value.length > maxLength.value
 })
 
 // Event handlers
 const handleKeyDown = (event) => {
+  // Enter 发送消息（不按 Shift）
   if (event.key === 'Enter' && !event.shiftKey) {
     event.preventDefault()
     sendMessage()
@@ -81,34 +107,42 @@ const createMessage = (role, content) => ({
 const sendMessage = async () => {
   if (isSendDisabled.value) return
 
+  const messageContent = inputValue.value.trim()
+  if (!messageContent) return
+
   try {
     sending.value = true
-    
-    // Prepare and add user message
-    const userMessage = createMessage(MESSAGE_ROLE.USER, inputValue.value.trim())
+
+    // 创建并添加用户消息
+    const userMessage = createMessage(MESSAGE_ROLE.USER, messageContent)
     sessionStore.addMessage(userMessage)
-    
-    // Save message content and clear input
-    const messageContent = inputValue.value
+
+    // 清空输入框
     inputValue.value = ''
-    
-    // Notify parent to scroll to bottom
+
+    // 通知父组件滚动到底部
     emit('send')
-    
-    // Send message to backend
+
+    // 发送消息到后端
     const response = await messageAPI.send(sessionStore.sessionId, {
       message: messageContent
     })
-    
-    // Prepare and add assistant message
+
+    // 创建并添加助手消息
     const assistantMessage = createMessage(MESSAGE_ROLE.ASSISTANT, response.response)
     sessionStore.addMessage(assistantMessage)
-    
-    // Notify parent to scroll to bottom again
+
+    // 再次通知父组件滚动到底部
     emit('send')
+
   } catch (error) {
     console.error('发送消息失败:', error)
     notification.error('发送消息失败')
+
+    // 错误时恢复输入内容
+    if (!inputValue.value.trim()) {
+      inputValue.value = messageContent
+    }
   } finally {
     sending.value = false
   }
@@ -121,103 +155,156 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.message-input-container {
+.message-input-wrapper {
   padding: 16px;
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  box-sizing: border-box;
+  background: #ffffff;
+  border-top: 1px solid #e5e7eb;
+}
+
+.input-container {
+  max-width: 95%;
+  margin: 0 auto;
+  position: relative;
+}
+
+/* 输入框容器 */
+.textarea-wrapper {
+  position: relative;
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  /* 预设阴影空间，避免聚焦时跳动 */
+  box-shadow: 0 0 0 3px transparent;
+  transition: all 0.2s ease;
+}
+
+.textarea-wrapper:focus-within {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
 }
 
 .message-textarea {
-  flex: 1;
-  border: none;
-  box-shadow: none;
-  resize: none;
-  padding: 6px 0;
-  outline: none;
   width: 100%;
-  /* Add rounded corners for better appearance */
-  border-radius: 8px;
-  /* Add a subtle shadow for depth */
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  padding: 16px 60px 16px 16px;
+  border: none;
+  background: transparent;
+  resize: none;
+  font-size: 14px;
+  line-height: 1.5;
   box-sizing: border-box;
 }
 
-:deep(.message-textarea .n-input__textarea-el),
+:deep(.message-textarea .n-input__textarea-el) {
+  border: none !important;
+  box-shadow: none !important;
+  outline: none !important;
+  background: transparent !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  box-sizing: border-box !important;
+}
+
 :deep(.message-textarea .n-input__border),
 :deep(.message-textarea .n-input__state-border) {
-  border: none;
-  box-shadow: none;
-  outline: none;
+  display: none !important;
 }
 
-.send-button-container {
-  display: flex;
-  justify-content: flex-end;
-  align-items: center;
-  padding: 8px 0;
-  /* Ensure the container takes up the full width */
-  width: 100%;
-  /* Add a small margin to ensure it doesn't touch the edge */
-  margin-top: 4px;
-  box-sizing: border-box;
+:deep(.message-textarea .n-input) {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+/* 发送按钮 */
+.send-button-wrapper {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  z-index: 10;
 }
 
 .send-button {
-  width: 32px;
-  height: 32px;
-  min-width: 32px;
-  padding: 0;
-  margin-left: 8px;
-  flex-shrink: 0;
-  /* Position the button in the bottom right corner */
-  position: relative;
-  right: 0;
-  /* Add a small margin to ensure it doesn't touch the edge */
-  margin-right: 4px;
-  /* Add a subtle shadow for depth */
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  transition: all 0.2s ease;
 }
 
-.send-button:disabled {
-  background-color: #f5f5f5;
-  border-color: #d9d9d9;
-  color: rgba(0, 0, 0, 0.25);
+.send-button:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
-html.dark .message-input-container {
-  background-color: #1e1e20;
+/* 字数统计 */
+.char-count-wrapper {
+  display: flex;
+  justify-content: flex-end;
+  padding: 8px 12px 0;
+}
+
+.char-count {
+  font-size: 12px;
+  color: #64748b;
+  font-weight: 500;
+  transition: color 0.2s ease;
+}
+
+.char-count.warning {
+  color: #f59e0b;
+}
+
+.char-count.error {
+  color: #ef4444;
+}
+
+/* 暗色模式 */
+html.dark .message-input-wrapper {
+  background: #1f2937;
+  border-top-color: #374151;
+}
+
+html.dark .textarea-wrapper {
+  background: #1f2937;
+  border-color: #4b5563;
+  box-shadow: 0 0 0 3px transparent;
+}
+
+html.dark .textarea-wrapper:focus-within {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
 }
 
 html.dark .message-textarea {
-  background-color: #2a2a2a;
-  color: #fff;
+  color: #f9fafb;
 }
 
-html.dark .send-button-container {
-  background-color: #1e1e20;
+html.dark .char-count {
+  color: #9ca3af;
 }
 
-html.dark .send-button {
-  background-color: #2a2a2a;
-  border-color: #444;
-  color: #fff;
-}
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .message-input-wrapper {
+    padding: 12px;
+  }
 
-html.dark .send-button:disabled {
-  background-color: #2a2a2a;
-  border-color: #444;
-  color: rgba(255, 255, 255, 0.3);
-}
+  .message-textarea {
+    padding: 12px 50px 12px 12px;
+  }
 
-/* Remove hover border */
-.message-input-container:hover {
-  border-color: inherit;
-}
+  .send-button-wrapper {
+    right: 8px;
+    bottom: 8px;
+  }
 
-html.dark .message-input-container:hover {
-  border-color: inherit;
+  .send-button {
+    width: 36px;
+    height: 36px;
+  }
+
+  .char-count-wrapper {
+    padding: 6px 8px 0;
+  }
 }
 </style>

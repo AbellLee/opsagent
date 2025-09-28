@@ -101,7 +101,19 @@ const handleLogin = (e) => {
         const result = await userStore.login(formValue.value)
         if (result.success) {
           message.success('登录成功')
-          router.push('/chat')
+
+          // 登录成功后，等待一小段时间让状态更新，然后跳转
+          setTimeout(() => {
+            router.push('/chat')
+
+            // 跳转后再次尝试刷新会话列表
+            setTimeout(() => {
+              if (window.refreshSessions) {
+                console.log('登录成功后刷新会话列表')
+                window.refreshSessions()
+              }
+            }, 100)
+          }, 100)
         } else {
           message.error(result.error || '登录失败')
         }
