@@ -1,13 +1,16 @@
 <template>
   <n-config-provider :locale="zhCN" :date-locale="dateZhCN">
     <n-message-provider>
-      <n-layout style="height: 100vh">
+      <n-layout style="height: 100vh; overflow: hidden;">
         <n-layout-header bordered style="padding: 16px; display: flex; align-items: center; justify-content: space-between;">
-          <h2 style="margin: 0">OpsAgent 管理平台</h2>
+          <div>
+            <h3 style="margin: 0">{{ currentSession?.session_name || '请选择或新建对话' }}</h3>
+            <div style="font-size: 12px; color: #666;">ID: {{ currentSession?.session_id }}</div>
+          </div>
           <n-button v-if="userStore.isAuthenticated" @click="handleLogout" size="small">退出登录</n-button>
         </n-layout-header>
         
-        <n-layout has-sider style="height: calc(100vh - 64px)">
+        <n-layout has-sider style="height: calc(100vh - 64px); overflow: hidden;">
           <n-layout-sider
             v-if="userStore.isAuthenticated"
             bordered
@@ -20,8 +23,14 @@
             @expand="handleExpand"
           >
             <div class="session-list-header">
-              <h3 style="margin: 0; padding: 16px;">会话列表</h3>
-              <n-button text @click="createNewSession" style="padding: 16px;">
+              <h3 v-show="!collapsed" style="margin: 0; padding: 16px;">会话列表</h3>
+              <n-button v-show="!collapsed" text @click="createNewSession" style="padding: 16px;">
+                <n-icon size="18">
+                  <Add />
+                </n-icon>
+              </n-button>
+              <!-- 收起时只显示图标 -->
+              <n-button v-show="collapsed" text @click="createNewSession" style="padding: 16px;" title="新建会话">
                 <n-icon size="18">
                   <Add />
                 </n-icon>
@@ -36,23 +45,30 @@
                   :class="{ active: session.session_id === sessionStore.sessionId }"
                 >
                   <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <div style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                    <!-- 收起时只显示图标 -->
+                    <div v-show="!collapsed" style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
                       <n-ellipsis>{{ session.session_name || '新建对话' }}</n-ellipsis>
                     </div>
+                    <div v-show="collapsed" style="flex: 1; text-align: center; padding: 8px 0;" :title="session.session_name || '新建对话'">
+                      <n-icon size="18">
+                        <ChatboxEllipses />
+                      </n-icon>
+                    </div>
+                    
                     <n-dropdown 
                       :options="sessionOptions" 
                       @select="(key) => handleSessionAction(key, session)"
                       trigger="click"
                       placement="bottom-end"
                     >
-                      <n-button text>
+                      <n-button v-show="!collapsed" text>
                         <n-icon size="16">
-                          <MoreHorizontal />
+                          <EllipsisVertical />
                         </n-icon>
                       </n-button>
                     </n-dropdown>
                   </div>
-                  <div style="font-size: 12px; color: #999; margin-top: 4px;">
+                  <div v-show="!collapsed" style="font-size: 12px; color: #999; margin-top: 4px;">
                     {{ formatTime(session.created_at) }}
                   </div>
                 </n-list-item>
@@ -60,8 +76,10 @@
             </n-scrollbar>
           </n-layout-sider>
           
-          <n-layout-content>
-            <router-view />
+          <n-layout-content style="overflow: hidden;">
+            <!-- 当没有选择会话时显示欢迎页面 -->
+            <WelcomeView v-if="!sessionStore.sessionId || sessionStore.sessionId === ''" />
+            <router-view v-else />
           </n-layout-content>
         </n-layout>
         
@@ -79,11 +97,12 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStore } from './stores/user'
 import { useSessionStore } from './stores/session'
 import { sessionAPI } from './api'
+import WelcomeView from './views/WelcomeView.vue'
 import { 
   NLayout, 
   NLayoutHeader, 
@@ -102,12 +121,17 @@ import {
 } from 'naive-ui'
 import { zhCN, dateZhCN } from 'naive-ui'
 import { createDiscreteApi } from 'naive-ui'
-import { Add, Trash, MoreHorizontal } from '@vicons/ionicons5'
+import { Add, Trash, MoreHorizontal, ChatboxEllipses, EllipsisVertical } from '@vicons/ionicons5'
 
 const router = useRouter()
 const userStore = useUserStore()
 const sessionStore = useSessionStore()
 const { message } = createDiscreteApi(['message'])
+
+// 计算属性：获取当前会话信息
+const currentSession = computed(() => {
+  return sessionStore.sessions.find(s => s.session_id === sessionStore.sessionId) || {}
+})
 
 const collapsed = ref(false)
 
@@ -278,5 +302,18 @@ const handleExpand = () => {
 
 .active {
   background-color: #e6f4ff;
+}
+
+/* 全局隐藏滚动条但仍保持滚动功能 */
+::-webkit-scrollbar {
+  width: 0 !important;
+  height: 0 !important;
+  display: none;
+  background: transparent;
+}
+
+* {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
 }
 </style>

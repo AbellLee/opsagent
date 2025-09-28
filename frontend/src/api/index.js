@@ -48,12 +48,8 @@ export const sessionAPI = {
   create: (sessionData) => apiClient.post('/sessions', sessionData),
   get: (sessionId) => apiClient.get(`/sessions/${sessionId}`),
   getMessages: (sessionId) => apiClient.get(`/sessions/${sessionId}/messages`),
-  updateName: (sessionId, sessionName) => apiClient.put(`/sessions/${sessionId}/name`, sessionName, {
-    headers: {
-      'Content-Type': 'application/json'
-    }
-  }),
-  delete: (sessionId) => apiClient.delete(`/sessions/${sessionId}`)
+  updateName: (sessionId, sessionName) => apiClient.put(`/sessions/${sessionId}/name?session_name=${encodeURIComponent(sessionName)}`),
+  'delete': (sessionId) => apiClient.delete(`/sessions/${sessionId}`)
 }
 
 // 消息相关 API
