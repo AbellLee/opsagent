@@ -1,54 +1,59 @@
 import { defineStore } from 'pinia'
+import { userAPI } from '../api'
 
 export const useUserStore = defineStore('user', {
   state: () => ({
-    userProfile: null,
-    authToken: null,
-    isLoggedIn: false
+    user: null,
+    token: localStorage.getItem('token') || null
   }),
   
   getters: {
-    isAuthenticated: (state) => state.isLoggedIn && state.userProfile && state.authToken
+    isAuthenticated: (state) => !!state.token
   },
   
   actions: {
-    setUserProfile(profile) {
-      this.userProfile = profile
-      this.isLoggedIn = !!profile
+    initializeFromStorage() {
+      const token = localStorage.getItem('token')
+      const user = localStorage.getItem('user')
+      
+      if (token && user) {
+        this.token = token
+        this.user = JSON.parse(user)
+      }
     },
     
-    setAuthToken(token) {
-      this.authToken = token
+    async login(credentials) {
+      try {
+        const response = await userAPI.login(credentials)
+        const { token, user } = response
+        
+        this.token = token
+        this.user = user
+        
+        localStorage.setItem('token', token)
+        localStorage.setItem('user', JSON.stringify(user))
+        
+        return { success: true }
+      } catch (error) {
+        return { success: false, error: error.message }
+      }
     },
     
-    login(profile, token) {
-      this.setUserProfile(profile)
-      this.setAuthToken(token)
-      // 保存到本地存储
-      localStorage.setItem('userProfile', JSON.stringify(profile))
-      localStorage.setItem('authToken', token)
+    async register(userData) {
+      try {
+        const response = await userAPI.register(userData)
+        return { success: true, data: response }
+      } catch (error) {
+        return { success: false, error: error.message }
+      }
     },
     
     logout() {
-      this.setUserProfile(null)
-      this.setAuthToken(null)
-      // 清除本地存储
-      localStorage.removeItem('userProfile')
-      localStorage.removeItem('authToken')
-    },
-    
-    initializeFromStorage() {
-      const profileStr = localStorage.getItem('userProfile')
-      const token = localStorage.getItem('authToken')
+      this.user = null
+      this.token = null
       
-      if (profileStr && token) {
-        try {
-          this.login(JSON.parse(profileStr), token)
-        } catch (e) {
-          console.error('Failed to initialize user from storage:', e)
-          this.logout()
-        }
-      }
+      localStorage.removeItem('token')
+      localStorage.removeItem('user')
     }
   }
 })

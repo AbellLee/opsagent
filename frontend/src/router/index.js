@@ -1,40 +1,29 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import LoginView from '../views/LoginView.vue'
+import RegisterView from '../views/RegisterView.vue'
+import ChatView from '../views/ChatView.vue'
 import { useUserStore } from '../stores/user'
 
 const routes = [
   {
     path: '/',
-    name: 'chat',
-    component: () => import('../views/ChatView.vue'),
-    meta: { requiresAuth: true }
-  },
-  {
-    path: '/tools',
-    name: 'tools',
-    component: () => import('../views/ToolsView.vue'),
-    meta: { requiresAuth: true }
-  },
-  {
-    path: '/approvals',
-    name: 'approvals',
-    component: () => import('../views/ApprovalsView.vue'),
-    meta: { requiresAuth: true }
-  },
-  {
-    path: '/users',
-    name: 'users',
-    component: () => import('../views/UsersView.vue'),
-    meta: { requiresAuth: true }
+    redirect: '/chat'
   },
   {
     path: '/login',
-    name: 'login',
-    component: () => import('../views/LoginView.vue')
+    name: 'Login',
+    component: LoginView
   },
   {
     path: '/register',
-    name: 'register',
-    component: () => import('../views/RegisterView.vue')
+    name: 'Register',
+    component: RegisterView
+  },
+  {
+    path: '/chat',
+    name: 'Chat',
+    component: ChatView,
+    meta: { requiresAuth: true }
   }
 ]
 
@@ -43,13 +32,15 @@ const router = createRouter({
   routes
 })
 
-// 全局前置守卫
+// 路由守卫
 router.beforeEach((to, from, next) => {
   const userStore = useUserStore()
+  const isAuthenticated = userStore.isAuthenticated
   
-  // 如果路由需要认证但用户未登录，则跳转到登录页
-  if (to.meta.requiresAuth && !userStore.isAuthenticated) {
+  if (to.meta.requiresAuth && !isAuthenticated) {
     next('/login')
+  } else if ((to.path === '/login' || to.path === '/register') && isAuthenticated) {
+    next('/chat')
   } else {
     next()
   }

@@ -58,18 +58,22 @@ def create_user(user_create: UserCreate, db = Depends(get_db)):
         )
 
 @router.post("/login")
-def login_user(user_create: UserCreate, db = Depends(get_db)):
+def login_user(user_credentials: dict, db = Depends(get_db)):
     """用户登录"""
     try:
+        # 从字典中提取凭证信息
+        email = user_credentials.get("email")
+        password = user_credentials.get("password")
+        
         # 在实际应用中，这里应该验证用户名/邮箱和密码
         # 目前简化处理，只检查用户是否存在
         cursor = db.cursor()
         cursor.execute(
             """
             SELECT user_id, username, email, created_at, updated_at FROM users 
-            WHERE username = %s OR email = %s
+            WHERE email = %s
             """,
-            (user_create.username, user_create.email)
+            (email,)
         )
         
         row = cursor.fetchone()

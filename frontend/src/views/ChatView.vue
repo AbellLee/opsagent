@@ -1,5 +1,5 @@
 <template>
-  <n-layout content-style="padding: 24px;" class="chat-layout">
+  <n-layout content-style="padding: 0;" class="chat-layout">
     <n-card class="chat-card" content-style="padding: 0; display: flex; flex-direction: column;">
       <!-- 头部工具栏 -->
       <div class="chat-header">
@@ -12,9 +12,9 @@
             </n-icon>
           </n-avatar>
           <div class="agent-details">
-            <h3>{{ agentStore.agentInfo.name || 'OpsAgent' }}</h3>
+            <h3>OpsAgent</h3>
             <div class="agent-description">
-              {{ agentStore.agentInfo.description || '智能AI助手' }}
+              智能AI助手
             </div>
           </div>
         </div>
@@ -46,19 +46,6 @@
             清空聊天记录
           </n-tooltip>
           
-          <n-tooltip trigger="hover">
-            <template #trigger>
-              <n-button size="small" tertiary @click="agentStore.fetchAgentInfo">
-                <n-icon size="16">
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M17.65 6.35C16.2 4.9 14.21 4 12 4C9.79 4 7.8 4.9 6.35 6.35C4.9 7.8 4 9.79 4 12C4 14.21 4.9 16.2 6.35 17.65C7.8 19.1 9.79 20 12 20C14.21 20 16.2 19.1 17.65 17.65C19.1 16.2 20 14.21 20 12C20 9.79 19.1 7.8 17.65 6.35ZM12 22C6.47 22 2 17.5 2 12S6.47 2 12 2C17.53 2 22 6.5 22 12S17.53 22 12 22ZM13 12H16L12 16L8 12H11V8H13V12Z"/>
-                  </svg>
-                </n-icon>
-              </n-button>
-            </template>
-            刷新Agent信息
-          </n-tooltip>
-          
           <n-button size="small" type="primary" @click="showAgentInfo = true">
             Agent信息
           </n-button>
@@ -82,19 +69,6 @@
             <template #extra>
               <div class="empty-messages-extra">
                 <n-button size="small" @click="sendGreeting">发送问候</n-button>
-                <div class="tools-info" v-if="agentStore.agentInfo.tools && agentStore.agentInfo.tools.length > 0">
-                  <n-tag 
-                    v-for="(tool, index) in agentStore.agentInfo.tools.slice(0, 3)" 
-                    :key="index" 
-                    size="small" 
-                    class="tool-tag"
-                  >
-                    {{ tool.name }}
-                  </n-tag>
-                  <span v-if="agentStore.agentInfo.tools.length > 3">
-                    等 {{ agentStore.agentInfo.tools.length }} 个工具
-                  </span>
-                </div>
               </div>
             </template>
           </n-empty>
@@ -114,7 +88,31 @@
     </n-card>
     
     <!-- Agent信息抽屉 -->
-    <AgentInfo v-model:show="showAgentInfo" />
+    <n-drawer v-model:show="showAgentInfo" :width="320" placement="right">
+      <n-drawer-content title="Agent信息" closable>
+        <div class="agent-drawer-content">
+          <n-descriptions label-placement="left" :column="1">
+            <n-descriptions-item label="名称">
+              OpsAgent
+            </n-descriptions-item>
+            <n-descriptions-item label="版本">
+              v1.0.0
+            </n-descriptions-item>
+            <n-descriptions-item label="描述">
+              智能AI助手，能够帮助您处理各种运维任务
+            </n-descriptions-item>
+            <n-descriptions-item label="功能">
+              <n-space>
+                <n-tag>日志分析</n-tag>
+                <n-tag>系统监控</n-tag>
+                <n-tag>故障诊断</n-tag>
+                <n-tag>自动化运维</n-tag>
+              </n-space>
+            </n-descriptions-item>
+          </n-descriptions>
+        </div>
+      </n-drawer-content>
+    </n-drawer>
   </n-layout>
 </template>
 
@@ -122,17 +120,14 @@
 import { ref, onMounted, watch, nextTick, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useSessionStore } from '../stores/session'
-import { useAgentStore } from '../stores/agent'
 import { useUserStore } from '../stores/user'
-import { useMessage } from 'naive-ui'
+import { createDiscreteApi } from 'naive-ui'
 import ChatMessage from '../components/ChatMessage.vue'
 import MessageInput from '../components/MessageInput.vue'
-import AgentInfo from '../components/AgentInfo.vue'
 
-const message = useMessage()
+const { message } = createDiscreteApi(['message'])
 const router = useRouter()
 const sessionStore = useSessionStore()
-const agentStore = useAgentStore()
 const userStore = useUserStore()
 
 // 组件状态
@@ -158,8 +153,6 @@ onMounted(() => {
   }
   
   scrollToBottom()
-  // 获取Agent信息
-  agentStore.fetchAgentInfo()
 })
 
 // 监听消息变化，自动滚动到底部
@@ -290,15 +283,6 @@ const sendGreeting = () => {
   gap: 12px;
 }
 
-.tools-info {
-  font-size: 12px;
-  margin-top: 8px;
-}
-
-.tool-tag {
-  margin-right: 4px;
-}
-
 .input-container {
   flex-shrink: 0;
   border-top: 1px solid #eee;
@@ -334,22 +318,3 @@ html.dark ::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.3);
 }
 </style>
-```
-
-```
-// src/api/base.js
-import axios from 'axios'
-
-// 创建基础API实例
-const createApiInstance = (url, method = 'GET') => {
-  const instance = axios.create({
-    baseURL: 'http://localhost:8000',
-    headers: {
-      'Content-Type': 'application/json'
-    }
-  })
-
-  return instance
-}
-
-export default createApiInstance

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from typing import List
 from uuid import UUID, uuid4
 from datetime import datetime, timedelta
@@ -135,7 +135,7 @@ def delete_session(session_id: UUID, db = Depends(get_db)):
         )
 
 @router.get("/", response_model=List[Session])
-def list_sessions(user_id: UUID, db = Depends(get_db)):
+def list_sessions(user_id: UUID = Query(...), db = Depends(get_db)):
     """列出用户的所有会话"""
     try:
         cursor = db.cursor()

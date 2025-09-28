@@ -97,14 +97,14 @@ def get_pending_approvals(db = Depends(get_db)):
     return []
 
 @router.post("/approvals/{approval_id}/approve")
-def approve_tool_execution(approval_id: UUID, db = Depends(get_db)):
+def approve_tool_execution_approval(approval_id: UUID, db = Depends(get_db)):
     """批准工具执行"""
     # 这里应该更新审批状态为已批准
     # 目前返回成功消息作为占位符
     return {"message": "工具执行已批准", "approval_id": str(approval_id)}
 
 @router.post("/approvals/{approval_id}/reject")
-def reject_tool_execution(approval_id: UUID, db = Depends(get_db)):
+def reject_tool_execution_approval(approval_id: UUID, db = Depends(get_db)):
     """拒绝工具执行"""
     # 这里应该更新审批状态为已拒绝
     # 目前返回成功消息作为占位符

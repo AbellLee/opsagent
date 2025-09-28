@@ -20,6 +20,7 @@
 - **AI模型**: 通义语言模型
 - **前端框架**: vue3
 - **UI库**: naive-ui
+- **状态管理**: pinia
 
 ## 项目结构
 
@@ -28,13 +29,6 @@ opsagent/
 ├── app/
 │   ├── main.py              # FastAPI应用入口
 │   ├── init_db.py           # 数据库初始化脚本
-│   ├── api/                 # API路由
-│   │   ├── routes/
-│   │   │   ├── sessions.py  # 会话管理路由
-│   │   │   ├── tools.py     # 工具管理路由
-│   │   │   ├── users.py     # 用户管理路由
-│   │   │   ├── agent.py     # Agent执行路由
-│   │   │   └── approvals.py # 审批管理路由
 │   ├── core/                # 核心配置
 │   │   ├── config.py        # 配置管理
 │   │   └── logger.py        # 日志配置
@@ -44,24 +38,50 @@ opsagent/
 │   │   ├── state.py         # Agent状态定义
 │   │   ├── model.py         # 通义模型集成
 │   │   ├── graph.py         # Agent图定义
-│   │   ├── memory.py        # 内存管理
 │   │   └── tools/           # 工具管理
+│   │       ├── __init__.py  # 工具管理器
 │   │       ├── mcp_tools.py # MCP工具集成
-│   │       ├── custom_tools.py # 自定义工具
-│   │       └── __init__.py  # 工具管理器
-│   └── api/
+│   │       └── custom_tools.py # 自定义工具
+│   └── api/                 # API路由
 │       ├── __init__.py      # API路由整合
-│       └── deps.py          # 依赖项
+│       ├── deps.py          # 依赖项
+│       └── routes/
+│           ├── sessions.py  # 会话管理路由
+│           ├── tools.py     # 工具管理路由
+│           ├── users.py     # 用户管理路由
+│           ├── agent.py     # Agent执行路由
+│           └── approvals.py # 审批管理路由
 ├── frontend/                # 前端项目
 │   ├── public/              # 静态资源
 │   ├── src/                 # 源代码
 │   │   ├── views/           # 页面组件
+│   │   │   ├── ChatView.vue     # 聊天界面
+│   │   │   ├── ToolsView.vue    # 工具管理界面
+│   │   │   ├── ApprovalsView.vue # 审批管理界面
+│   │   │   ├── LoginView.vue    # 登录界面
+│   │   │   ├── RegisterView.vue # 注册界面
+│   │   │   └── UsersView.vue    # 用户管理界面
+│   │   ├── components/      # 可复用组件
+│   │   │   ├── AgentInfo.vue    # Agent信息组件
+│   │   │   ├── ChatMessage.vue  # 聊天消息组件
+│   │   │   └── MessageInput.vue # 消息输入组件
+│   │   ├── stores/          # 状态管理
+│   │   │   ├── agent.js          # Agent状态管理
+│   │   │   ├── chat.js           # 聊天状态管理
+│   │   │   ├── session.js        # 会话状态管理
+│   │   │   ├── tool.js           # 工具状态管理
+│   │   │   └── user.js           # 用户状态管理
+│   │   ├── api/             # API调用封装
+│   │   │   └── index.js          # API接口封装
 │   │   ├── router/          # 路由配置
+│   │   │   └── index.js          # 路由配置文件
+│   │   ├── utils/           # 工具函数
+│   │   │   └── index.js          # 工具函数封装
 │   │   ├── App.vue          # 根组件
 │   │   └── main.js          # 入口文件
 │   ├── package.json         # 项目依赖
 │   └── vue.config.js        # Vue配置
-├── requirements.txt         # 项目依赖
+├── requirements.txt         # 后端项目依赖
 ├── DESIGN.md               # 设计文档
 └── README.md               # 项目说明
 ```
@@ -92,19 +112,22 @@ cp .env.example .env
 ### 3. 初始化数据库
 
 ```bash
+cd app
 python init_db.py
 ```
 
 ### 4. 启动后端服务
 
 ```bash
-python app/main.py
+cd app
+uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-或者使用uvicorn：
+或者
 
 ```bash
-uvicorn app.main:app --host 0.0.0.0 --port 8000
+cd app
+python main.py
 ```
 
 ### 5. 安装前端依赖
@@ -114,38 +137,36 @@ cd frontend
 npm install
 ```
 
-### 6. 启动前端开发服务器
+### 6. 启动前端服务
 
 ```bash
+cd frontend
 npm run serve
 ```
 
-### 7. 访问应用
-
-- 前端界面: http://localhost:8080
-- API文档: http://localhost:8000/docs
-
 ## API接口
+
+主要API接口包括：
 
 ### 会话管理
 - `POST /api/sessions` - 创建新会话
 - `GET /api/sessions/{session_id}` - 获取会话信息
+- `PUT /api/sessions/{session_id}/name` - 更新会话名称
 - `DELETE /api/sessions/{session_id}` - 删除会话
-- `GET /api/sessions` - 列出当前用户的所有会话
+- `GET /api/sessions` - 列出用户的所有会话
 
 ### Agent执行
-- `POST /api/sessions/{session_id}/execute` - 执行Agent任务
 - `POST /api/sessions/{session_id}/chat` - 与Agent聊天（支持连续对话）
-- `GET /api/sessions/{session_id}/messages` - 获取对话历史
-- `DELETE /api/sessions/{session_id}/messages` - 清空对话历史
+- `POST /api/sessions/{session_id}/execute` - 执行Agent任务
 
 ### 工具管理
 - `GET /api/tools` - 列出所有可用工具
+- `GET /api/tools/{tool_id}` - 获取特定工具详情
 - `PUT /api/tools/{tool_id}/approval` - 设置工具审批配置
 
 ### 审批管理
-- `POST /api/approvals` - 请求工具执行审批
 - `GET /api/approvals` - 列出所有待审批项
+- `POST /api/approvals` - 请求工具执行审批
 - `POST /api/approvals/{approval_id}/approve` - 批准工具执行
 - `POST /api/approvals/{approval_id}/reject` - 拒绝工具执行
 
@@ -155,41 +176,19 @@ npm run serve
 - `GET /api/users/profile` - 获取用户信息
 - `PUT /api/users/profile` - 更新用户信息
 
-## 前端功能
-
-### 聊天界面
-- 实时与Agent对话
-- 显示对话历史
-- 支持多轮对话
-
-### 工具管理
-- 查看可用工具列表
-- 配置工具审批规则
-
-### 审批管理
-- 查看待审批请求
-- 批准或拒绝工具执行
-
-## 工具审批机制
-
-系统支持灵活的工具审批机制，可以针对不同用户和工具进行个性化配置：
-
-1. **默认配置**: 当用户没有特定配置时，使用默认审批规则
-2. **用户特定配置**: 每个用户可以为特定工具设置独立的审批规则
-3. **审批类型**:
-   - 自动执行: 工具无需审批直接执行
-   - 人工审批: 工具执行前需要人工审批
-
-## 数据模型
+## 数据库表结构
 
 ### 用户表 (users)
-存储系统用户信息
+存储用户基本信息
 
 ### 用户会话关系表 (user_sessions)
-存储用户会话信息
+关联用户和会话
 
 ### 工具审批配置表 (tool_approval_config)
-存储工具审批配置，支持默认配置和用户特定配置
+配置工具执行审批规则
+
+### 检查点表
+由langgraph自动创建和管理，用于持久化Agent状态
 
 ## 许可证
 
