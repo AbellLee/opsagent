@@ -15,7 +15,7 @@ from langchain_core.messages import ToolMessage, AIMessage
 from app.agent.graph import graph_builder
 from app.core.logger import logger
 
-router = APIRouter(prefix="/api/sessions/{session_id}", tags=["agent"])
+router = APIRouter(prefix="/api/sessions", tags=["agent"])
 
 def get_session_messages_from_db(db, session_id: UUID) -> List:
     """从数据库获取会话历史消息"""
@@ -72,7 +72,7 @@ class AgentExecuteRequest(BaseModel):
     tools: Optional[List[str]] = None
     config: Optional[Dict[str, Any]] = None
 
-@router.post("/execute")
+@router.post("/{session_id}/execute")
 async def execute_agent(
     session_id: UUID,
     request: AgentExecuteRequest,
@@ -116,7 +116,7 @@ async def execute_agent(
             detail=f"执行Agent任务失败: {str(e)}"
         )
 
-@router.post("/chat")
+@router.post("/{session_id}/chat")
 async def chat_with_agent(
     session_id: UUID,
     request: AgentExecuteRequest,

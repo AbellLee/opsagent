@@ -168,9 +168,17 @@ const createNewSession = async () => {
 }
 
 // 选择会话
-const selectSession = (session) => {
+const selectSession = async (session) => {
   sessionStore.setSessionId(session.session_id)
-  // 这里应该加载会话的详细内容
+  // 加载会话的详细内容（消息）
+  try {
+    const response = await sessionAPI.getMessages(session.session_id)
+    sessionStore.setMessages(response.messages || [])
+  } catch (error) {
+    console.error('加载会话消息失败:', error)
+    message.error('加载会话消息失败: ' + (error.response?.data?.detail || error.message))
+    sessionStore.setMessages([]) // 出错时清空消息
+  }
 }
 
 // 处理会话操作

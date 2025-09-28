@@ -44,9 +44,10 @@ export const userAPI = {
 
 // 会话相关 API
 export const sessionAPI = {
-  list: (userId) => apiClient.get(`/sessions?user_id=${userId}`),
+  list: (userId) => apiClient.get(`/sessions/?user_id=${userId}`),
   create: (sessionData) => apiClient.post('/sessions', sessionData),
   get: (sessionId) => apiClient.get(`/sessions/${sessionId}`),
+  getMessages: (sessionId) => apiClient.get(`/sessions/${sessionId}/messages`),
   updateName: (sessionId, sessionName) => apiClient.put(`/sessions/${sessionId}/name`, sessionName, {
     headers: {
       'Content-Type': 'application/json'
