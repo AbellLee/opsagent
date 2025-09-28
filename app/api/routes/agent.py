@@ -4,13 +4,15 @@ from typing import List, Optional, Dict, Any
 from uuid import UUID
 from datetime import datetime
 from langchain_core.messages import HumanMessage, AIMessage, ToolMessage, SystemMessage
-
 from app.core.logger import logger
+from app.core.config import settings
+
+from langgraph.checkpoint.postgres import PostgresSaver
+from langgraph.store.postgres import PostgresStore
 
 from typing import Dict, Any
 from langchain_core.messages import ToolMessage, AIMessage
 from app.agent.graph import graph_builder
-from app.core.graph_deps import app_store, app_checkpointer
 from app.core.logger import logger
 
 router = APIRouter(prefix="/api/sessions/{session_id}", tags=["agent"])
@@ -121,57 +123,60 @@ async def chat_with_agent(
 ):
     """与Agent聊天（支持连续对话）"""
     try:
-
-        graph = graph_builder.compile(
-            checkpointer=app_checkpointer,
-            store=app_store,
-        )
-        # 检查消息是否为空
-        if not request.message or not request.message.strip():
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="消息内容不能为空"
+        with (
+            PostgresStore.from_conn_string(settings.database_url) as store,
+            PostgresSaver.from_conn_string(settings.database_url) as checkpointer,
+        ):
+            graph = graph_builder.compile(
+                checkpointer = checkpointer,
+                store = store,
             )
-        
-        # 构造输入
-        inputs = {
-            "messages": [
-                HumanMessage(content=request.message.strip())
-            ],
-            "user_id": "default_user",  # 实际应用中应从认证信息获取
-            "session_id": str(session_id),
-            "tool_approval_required": False,
-            "pending_tool_approvals": [],
-            "intermediate_steps": []
-        }
-        
-        # 使用session_id作为thread_id，实现会话级别的记忆
-        config = {
-            "configurable": {
-                "thread_id": str(session_id)
+            # 检查消息是否为空
+            if not request.message or not request.message.strip():
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="消息内容不能为空"
+                )
+            
+            # 构造输入
+            inputs = {
+                "messages": [
+                    HumanMessage(content=request.message.strip())
+                ],
+                "user_id": "default_user",  # 实际应用中应从认证信息获取
+                "session_id": str(session_id),
+                "tool_approval_required": False,
+                "pending_tool_approvals": [],
+                "intermediate_steps": []
             }
-        }
-        
-        # 执行Agent图
-        result = graph.invoke(inputs, config)
-        logger.info(f"Agent图执行结果: {result}")
-        
-        # 提取响应消息
-        messages = result.get("messages", [])
-        if messages:
-            last_message = messages[-1]
-            response_content = last_message.content if hasattr(last_message, 'content') else str(last_message)
-            return {
-                "session_id": session_id,
-                "response": response_content,
-                "status": "success"
+            
+            # 使用session_id作为thread_id，实现会话级别的记忆
+            config = {
+                "configurable": {
+                    "thread_id": str(session_id)
+                }
             }
-        else:
-            return {
-                "session_id": session_id,
-                "response": "抱歉，我没有理解你的意思。",
-                "status": "success"
-            }
+            
+            # 执行Agent图
+            result = graph.invoke(inputs, config)
+            logger.info(f"Agent图执行结果: {result}")
+            
+            # 提取响应消息
+            messages = result.get("messages", [])
+            if messages:
+                last_message = messages[-1]
+                response_content = last_message.content if hasattr(last_message, 'content') else str(last_message)
+                return {
+                    "session_id": session_id,
+                    "response": response_content,
+                    "status": "success"
+                }
+            else:
+                return {
+                    "session_id": session_id,
+                    "response": "抱歉，我没有理解你的意思。",
+                    "status": "success"
+                }
                 
     except HTTPException:
         raise

@@ -1,21 +1,18 @@
 import sys
 import os
 
-from contextlib import asynccontextmanager
 # 将项目根目录添加到Python路径中
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.api import api_router
-from app.core.graph_deps import init_graph_components, app_store, app_checkpointer
 
 
 app = FastAPI(
     title="OpsAgent API",
     description="基于langgraph、fastapi和postgresql构建的Agent系统",
     version="0.1.0",
-    lifespan=init_graph_components
 )
 
 # 添加CORS中间件
