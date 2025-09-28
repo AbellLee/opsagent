@@ -27,6 +27,7 @@
 opsagent/
 ├── app/
 │   ├── main.py              # FastAPI应用入口
+│   ├── init_db.py           # 数据库初始化脚本
 │   ├── api/                 # API路由
 │   │   ├── routes/
 │   │   │   ├── sessions.py  # 会话管理路由
@@ -60,7 +61,6 @@ opsagent/
 │   │   └── main.js          # 入口文件
 │   ├── package.json         # 项目依赖
 │   └── vue.config.js        # Vue配置
-├── init_db.py               # 数据库初始化脚本
 ├── requirements.txt         # 项目依赖
 ├── DESIGN.md               # 设计文档
 └── README.md               # 项目说明

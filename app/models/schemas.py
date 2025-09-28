@@ -23,6 +23,7 @@ class SessionCreate(BaseModel):
 class Session(BaseModel):
     session_id: UUID
     user_id: UUID
+    session_name: str = "新建对话"
     created_at: datetime
     expires_at: datetime
 
