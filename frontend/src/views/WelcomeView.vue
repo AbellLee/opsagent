@@ -72,6 +72,10 @@ const createNewSession = async () => {
     
     sessionStore.addSession(response)
     sessionStore.setSessionId(response.session_id)
+    
+    // 加载新创建的会话消息（初始为空）
+    sessionStore.setMessages([])
+    
     message.success('新会话创建成功')
   } catch (error) {
     console.error('创建新会话失败:', error)

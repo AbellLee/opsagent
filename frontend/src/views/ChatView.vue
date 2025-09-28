@@ -140,9 +140,11 @@ const sendGreeting = () => {
   position: sticky;
   bottom: 0;
   background: white;
+  padding: 0;
 }
 
 html.dark .input-container {
   background: #1e1e20;
+  border-top: 1px solid #333;
 }
 </style>

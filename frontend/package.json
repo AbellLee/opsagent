@@ -10,6 +10,7 @@
   "dependencies": {
     "@vicons/ionicons5": "^0.13.0",
     "axios": "^1.6.0",
+    "mermaid": "^10.0.0",
     "naive-ui": "^2.34.0",
     "pinia": "^2.0.0",
     "vue": "^3.4.0",

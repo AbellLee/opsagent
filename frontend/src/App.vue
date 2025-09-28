@@ -47,7 +47,7 @@
                   <div style="display: flex; justify-content: space-between; align-items: center;">
                     <!-- 收起时只显示图标 -->
                     <div v-show="!collapsed" style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
-                      <n-ellipsis>{{ session.session_name || '新建对话' }}</n-ellipsis>
+                      <n-ellipsis :tooltip="false">{{ session.session_name || '新建对话' }}</n-ellipsis>
                     </div>
                     <div v-show="collapsed" style="flex: 1; text-align: center; padding: 8px 0;" :title="session.session_name || '新建对话'">
                       <n-icon size="18">
@@ -61,7 +61,7 @@
                       trigger="click"
                       placement="bottom-end"
                     >
-                      <n-button v-show="!collapsed" text>
+                      <n-button v-show="!collapsed" text :tooltip="false">
                         <n-icon size="16">
                           <EllipsisVertical />
                         </n-icon>
@@ -76,10 +76,10 @@
             </n-scrollbar>
           </n-layout-sider>
           
-          <n-layout-content style="overflow: hidden;">
+          <n-layout-content style="overflow: hidden; height: 100%;">
             <!-- 当没有选择会话时显示欢迎页面 -->
             <WelcomeView v-if="!sessionStore.sessionId || sessionStore.sessionId === ''" />
-            <router-view v-else />
+            <router-view v-else style="height: 100%;" />
           </n-layout-content>
         </n-layout>
         
@@ -184,6 +184,10 @@ const createNewSession = async () => {
     
     sessionStore.addSession(response)
     sessionStore.setSessionId(response.session_id)
+    
+    // 加载新创建的会话消息（初始为空）
+    sessionStore.setMessages([])
+    
     message.success('新会话创建成功')
   } catch (error) {
     console.error('创建新会话失败:', error)
@@ -291,6 +295,14 @@ const handleExpand = () => {
 <style>
 #app {
   height: 100%;
+  overflow: hidden;
+}
+
+html, body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
 }
 
 .session-list-header {
