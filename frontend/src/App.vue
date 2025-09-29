@@ -40,10 +40,9 @@
           </div>
         </n-layout-header>
 
-        <n-layout has-sider :style="{ height: userStore.isAuthenticated ? 'calc(100vh - 64px)' : '100vh', overflow: 'hidden' }">
+        <n-layout has-sider class="main-content-layout">
           <n-layout-sider
             v-if="userStore.isAuthenticated"
-            bordered
             width="240"
             collapse-mode="width"
             :collapsed-width="64"
@@ -53,20 +52,27 @@
             @expand="handleExpand"
           >
             <div class="session-list-header">
-              <h3 v-show="!collapsed" style="margin: 0; padding: 16px;">会话列表</h3>
-              <n-button v-show="!collapsed" text @click="createNewSession" style="padding: 16px;">
-                <n-icon size="18">
-                  <Add />
-                </n-icon>
-              </n-button>
-              <!-- 收起时只显示图标 -->
-              <n-button v-show="collapsed" text @click="createNewSession" style="padding: 16px;" title="新建会话">
-                <n-icon size="18">
-                  <Add />
-                </n-icon>
-              </n-button>
+              <!-- 展开状态 -->
+              <template v-if="!collapsed">
+                <h4 style="margin: 0; font-size: 18px; font-weight: 600;">会话列表</h4>
+                <n-button text @click="createNewSession" class="new-session-btn">
+                  <n-icon size="18">
+                    <Add />
+                  </n-icon>
+                </n-button>
+              </template>
+              <!-- 收起状态 -->
+              <template v-else>
+                <div style="width: 100%; display: flex; justify-content: center;">
+                  <n-button text @click="createNewSession" title="新建会话" class="new-session-btn-collapsed">
+                    <n-icon size="20">
+                      <Add />
+                    </n-icon>
+                  </n-button>
+                </div>
+              </template>
             </div>
-            <n-scrollbar style="height: calc(100% - 64px);">
+            <n-scrollbar class="session-list-scroll">
               <n-list hoverable clickable>
                 <n-list-item 
                   v-for="session in sessionStore.sessions" 
@@ -106,13 +112,13 @@
             </n-scrollbar>
           </n-layout-sider>
           
-          <n-layout-content style="overflow: hidden; height: 100%;">
+          <n-layout-content class="main-content-area">
             <!-- 只有在已登录且没有选择会话时显示欢迎页面 -->
             <WelcomeView v-if="userStore.isAuthenticated && (!sessionStore.sessionId || sessionStore.sessionId === '')" />
             <!-- 已登录且有会话时显示聊天视图 -->
-            <ChatView v-else-if="userStore.isAuthenticated && sessionStore.sessionId" style="height: 100%;" />
+            <ChatView v-else-if="userStore.isAuthenticated && sessionStore.sessionId" />
             <!-- 未登录时显示路由视图（登录/注册页面） -->
-            <router-view v-else style="height: 100%;" />
+            <router-view v-else />
           </n-layout-content>
         </n-layout>
         
@@ -604,43 +610,379 @@ const handleExpand = () => {
 </script>
 
 <style>
+/* 全局样式美化 - 修复布局 */
 #app {
-  height: 100%;
+  height: 100vh;
+  width: 100vw;
   overflow: hidden;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+  display: flex;
+  flex-direction: column;
 }
 
 html, body {
-  height: 100%;
+  height: 100vh;
+  width: 100vw;
   margin: 0;
   padding: 0;
   overflow: hidden;
 }
 
+/* 防止页面滚动的额外保护 */
+html {
+  overflow: hidden !important;
+  touch-action: none;
+}
+
+body {
+  overflow: hidden !important;
+  touch-action: none;
+  overscroll-behavior: none;
+}
+
+/* 确保根元素不会滚动 */
+#app, .n-config-provider, .n-message-provider {
+  overflow: hidden !important;
+  height: 100vh !important;
+  width: 100vw !important;
+}
+
+/* 整体布局美化 - 修复重叠问题 */
+.n-layout {
+  background: transparent;
+  height: 100vh !important;
+  width: 100vw !important;
+  overflow: hidden !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+/* Header 美化 - 修复定位 */
+.n-layout-header {
+  background: rgba(255, 255, 255, 0.95) !important;
+  backdrop-filter: blur(20px);
+  border: none !important;
+  box-shadow: 0 4px 32px rgba(0, 0, 0, 0.1);
+  border-radius: 0 0 20px 20px !important;
+  margin: 0 12px 8px 12px;
+  height: 72px !important;
+  min-height: 72px !important;
+  max-height: 72px !important;
+  flex-shrink: 0;
+  z-index: 10;
+  position: relative;
+}
+
+/* 主内容区域布局 */
+.main-content-layout {
+  flex: 1 !important;
+  height: calc(100vh - 80px) !important;
+  max-height: calc(100vh - 80px) !important;
+  overflow: hidden !important;
+  display: flex !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+/* Sidebar 美化 - 修复布局和展开按钮，移除白线 */
+.n-layout-sider {
+  background: rgba(255, 255, 255, 0.9) !important;
+  backdrop-filter: blur(20px);
+  border: none !important;
+  border-right: none !important;
+  border-left: none !important;
+  border-top: none !important;
+  border-bottom: none !important;
+  border-radius: 20px !important;
+  margin: 0 8px 12px 12px !important;
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.12);
+  overflow: visible !important; /* 允许展开按钮显示 */
+  height: calc(100vh - 92px) !important;
+  max-height: calc(100vh - 92px) !important;
+  flex-shrink: 0;
+  display: flex !important;
+  flex-direction: column !important;
+  position: relative !important;
+}
+
+/* 修复侧边栏内容区域，移除所有边框 */
+.n-layout-sider .n-layout-sider-scroll-container {
+  border-radius: 20px !important;
+  overflow: hidden !important;
+  border: none !important;
+  border-right: none !important;
+  border-left: none !important;
+  border-top: none !important;
+  border-bottom: none !important;
+}
+
+/* 确保侧边栏内部所有元素无边框 */
+.n-layout-sider * {
+  border-right: none !important;
+}
+
+.n-layout-sider::before,
+.n-layout-sider::after {
+  display: none !important;
+}
+
+/* 移除可能的分割线 */
+.n-layout-sider .n-layout-sider__border {
+  display: none !important;
+}
+
+.n-layout-sider .n-divider {
+  display: none !important;
+}
+
+/* 美化展开/收起按钮 */
+.n-layout-sider .n-layout-toggle-button {
+  background: rgba(255, 255, 255, 0.9) !important;
+  backdrop-filter: blur(10px) !important;
+  border: 1px solid rgba(102, 126, 234, 0.2) !important;
+  border-radius: 50% !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1) !important;
+  width: 32px !important;
+  height: 32px !important;
+  right: -16px !important;
+  top: 50% !important;
+  transform: translateY(-50%) !important;
+  z-index: 100 !important;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+.n-layout-sider .n-layout-toggle-button:hover {
+  background: rgba(102, 126, 234, 0.1) !important;
+  border-color: rgba(102, 126, 234, 0.4) !important;
+  transform: translateY(-50%) scale(1.1) !important;
+  box-shadow: 0 6px 20px rgba(102, 126, 234, 0.2) !important;
+}
+
+.n-layout-sider .n-layout-toggle-button .n-icon {
+  color: #667eea !important;
+  transition: all 0.3s ease !important;
+}
+
+.n-layout-sider .n-layout-toggle-button:hover .n-icon {
+  color: #5a6fd8 !important;
+}
+
+/* Content 区域美化 - 修复布局 */
+.n-layout-content {
+  background: rgba(255, 255, 255, 0.95) !important;
+  backdrop-filter: blur(20px);
+  border-radius: 20px !important;
+  margin: 0 12px 12px 8px !important;
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.12);
+  overflow: hidden;
+  height: calc(100vh - 92px) !important;
+  max-height: calc(100vh - 92px) !important;
+  flex: 1;
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+/* 主内容区域样式 */
+.main-content-area {
+  position: relative !important;
+  overflow: hidden !important;
+  height: 100% !important;
+  width: 100% !important;
+}
+
+/* 会话列表头部美化 - 修复高度 */
 .session-list-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  border-bottom: 1px solid #eee;
+  padding: 20px 24px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  position: relative;
+  overflow: hidden;
+  flex-shrink: 0;
+  height: 80px;
+  min-height: 80px;
+  max-height: 80px;
+  box-sizing: border-box;
 }
 
+/* 会话列表滚动区域 */
+.session-list-scroll {
+  flex: 1 !important;
+  height: calc(100% - 80px) !important;
+  max-height: calc(100% - 80px) !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+}
+
+.session-list-header::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><pattern id="grain" width="100" height="100" patternUnits="userSpaceOnUse"><circle cx="25" cy="25" r="1" fill="white" opacity="0.1"/><circle cx="75" cy="75" r="1" fill="white" opacity="0.1"/><circle cx="50" cy="10" r="0.5" fill="white" opacity="0.1"/></pattern></defs><rect width="100" height="100" fill="url(%23grain)"/></svg>');
+  opacity: 0.3;
+}
+
+.session-list-header > * {
+  position: relative;
+  z-index: 1;
+}
+
+.session-list-header h4 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  letter-spacing: 0.5px;
+}
+
+/* 新建会话按钮美化 */
+.new-session-btn {
+  background: rgba(255, 255, 255, 0.2) !important;
+  border: 1px solid rgba(255, 255, 255, 0.3) !important;
+  color: white !important;
+  backdrop-filter: blur(10px);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  border-radius: 12px !important;
+  font-weight: 500;
+  padding: 8px 12px !important;
+}
+
+.new-session-btn:hover {
+  background: rgba(255, 255, 255, 0.3) !important;
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.2);
+}
+
+/* 收起状态的新建会话按钮 */
+.new-session-btn-collapsed {
+  background: rgba(255, 255, 255, 0.2) !important;
+  border: 1px solid rgba(255, 255, 255, 0.3) !important;
+  color: white !important;
+  backdrop-filter: blur(10px);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  border-radius: 50% !important;
+  width: 40px !important;
+  height: 40px !important;
+  padding: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+.new-session-btn-collapsed:hover {
+  background: rgba(255, 255, 255, 0.3) !important;
+  transform: scale(1.1);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
+}
+
+/* 会话项美化 */
 .active {
-  background-color: #e6f4ff;
+  background: linear-gradient(135deg, rgba(102, 126, 234, 0.15) 0%, rgba(118, 75, 162, 0.15) 100%) !important;
+  border-right: 4px solid #667eea !important;
+  transform: translateX(4px);
+  box-shadow: 4px 0 20px rgba(102, 126, 234, 0.25);
 }
 
-/* 全局隐藏滚动条但仍保持滚动功能 */
+/* 美化滚动条 */
 ::-webkit-scrollbar {
-  width: 0 !important;
-  height: 0 !important;
-  display: none;
-  background: transparent;
+  width: 6px;
+  height: 6px;
 }
 
-* {
-  scrollbar-width: none;
-  -ms-overflow-style: none;
+::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.05);
+  border-radius: 3px;
 }
 
-/* 用户菜单样式 */
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 3px;
+  transition: all 0.3s ease;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(135deg, #5a6fd8 0%, #6a4c93 100%);
+}
+
+/* 暗色模式滚动条 */
+html.dark ::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+html.dark ::-webkit-scrollbar-thumb {
+  background: linear-gradient(135deg, #4a5568 0%, #2d3748 100%);
+}
+
+html.dark ::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+/* 页面加载动画 */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideInLeft {
+  from {
+    opacity: 0;
+    transform: translateX(-30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes slideInRight {
+  from {
+    opacity: 0;
+    transform: translateX(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* 应用动画 */
+.n-layout-header {
+  animation: fadeInUp 0.6s ease-out;
+}
+
+.n-layout-sider {
+  animation: slideInLeft 0.6s ease-out;
+}
+
+.n-layout-content {
+  animation: slideInRight 0.6s ease-out;
+}
+
+.n-list-item {
+  animation: fadeInUp 0.4s ease-out;
+  animation-fill-mode: both;
+}
+
+.n-list-item:nth-child(1) { animation-delay: 0.1s; }
+.n-list-item:nth-child(2) { animation-delay: 0.2s; }
+.n-list-item:nth-child(3) { animation-delay: 0.3s; }
+.n-list-item:nth-child(4) { animation-delay: 0.4s; }
+.n-list-item:nth-child(5) { animation-delay: 0.5s; }
+
+/* 用户菜单样式美化 */
 .user-menu {
   position: relative;
 }
@@ -648,81 +990,91 @@ html, body {
 .user-avatar-wrapper {
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 4px 8px;
-  border-radius: 20px;
+  gap: 8px;
+  padding: 8px 16px;
+  border-radius: 25px;
   cursor: pointer;
-  transition: all 0.2s ease;
-  background: transparent;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
 }
 
 .user-avatar-wrapper:hover {
-  background: rgba(0, 0, 0, 0.05);
+  background: rgba(255, 255, 255, 0.2);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
 }
 
 .user-avatar {
-  border: 2px solid #e5e7eb;
-  transition: all 0.2s ease;
+  border: 3px solid rgba(255, 255, 255, 0.3);
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
 }
 
 .user-avatar-wrapper:hover .user-avatar {
-  border-color: #3b82f6;
+  border-color: rgba(255, 255, 255, 0.6);
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.15);
 }
 
 .dropdown-icon {
-  color: #6b7280;
-  transition: all 0.2s ease;
+  color: rgba(255, 255, 255, 0.7);
+  transition: all 0.3s ease;
 }
 
 .user-avatar-wrapper:hover .dropdown-icon {
-  color: #3b82f6;
+  color: rgba(255, 255, 255, 0.9);
+  transform: rotate(180deg);
 }
 
-/* 暗色模式支持 */
-html.dark .user-avatar-wrapper:hover {
-  background: rgba(255, 255, 255, 0.1);
-}
-
-html.dark .user-avatar {
-  border-color: #4b5563;
-}
-
-html.dark .user-avatar-wrapper:hover .user-avatar {
-  border-color: #3b82f6;
-}
-
-html.dark .dropdown-icon {
-  color: #9ca3af;
-}
-
-html.dark .user-avatar-wrapper:hover .dropdown-icon {
-  color: #3b82f6;
-}
-
-/* 用户信息弹窗样式 */
+/* 用户信息弹窗样式美化 */
 .profile-loading {
   display: flex;
   justify-content: center;
   align-items: center;
-  padding: 40px 0;
+  padding: 60px 0;
 }
 
 .user-profile-content {
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 32px;
+  padding: 20px;
 }
 
 .profile-avatar-section {
   display: flex;
   justify-content: center;
   align-items: center;
-  padding: 20px 0;
+  padding: 30px 0;
+  position: relative;
+}
+
+.profile-avatar-section::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 120px;
+  height: 120px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 50%;
+  opacity: 0.1;
+  z-index: 0;
 }
 
 .profile-avatar {
-  border: 3px solid #e5e7eb;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  border: 4px solid #667eea;
+  box-shadow: 0 8px 32px rgba(102, 126, 234, 0.3);
+  position: relative;
+  z-index: 1;
+  transition: all 0.3s ease;
+}
+
+.profile-avatar:hover {
+  transform: scale(1.05);
+  box-shadow: 0 12px 40px rgba(102, 126, 234, 0.4);
 }
 
 .profile-info-section {
@@ -730,17 +1082,222 @@ html.dark .user-avatar-wrapper:hover .dropdown-icon {
 }
 
 .profile-error {
-  padding: 20px 0;
+  padding: 40px 0;
+  text-align: center;
 }
 
 .profile-footer {
   display: flex;
   justify-content: flex-end;
-  gap: 12px;
+  gap: 16px;
+  padding-top: 20px;
+  border-top: 1px solid rgba(0, 0, 0, 0.1);
 }
 
-/* 暗色模式下的用户信息弹窗 */
+/* 暗色模式美化 */
+html.dark #app {
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+}
+
+html.dark .n-layout-header {
+  background: rgba(30, 30, 30, 0.95) !important;
+  box-shadow: 0 4px 32px rgba(0, 0, 0, 0.3);
+}
+
+html.dark .n-layout-sider {
+  background: rgba(30, 30, 30, 0.9) !important;
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.3);
+}
+
+html.dark .n-layout-content {
+  background: rgba(30, 30, 30, 0.95) !important;
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.3);
+}
+
+html.dark .session-list-header {
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+}
+
+html.dark .user-avatar-wrapper {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+html.dark .user-avatar-wrapper:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+html.dark .user-avatar {
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+html.dark .user-avatar-wrapper:hover .user-avatar {
+  border-color: rgba(255, 255, 255, 0.4);
+}
+
 html.dark .profile-avatar {
-  border-color: #4b5563;
+  border-color: #667eea;
+}
+
+html.dark .profile-footer {
+  border-top-color: rgba(255, 255, 255, 0.1);
+}
+
+/* 会话列表项美化 - 移除所有边框 */
+.n-list-item {
+  padding: 16px 24px !important;
+  cursor: pointer;
+  border: none !important;
+  border-right: none !important;
+  border-left: none !important;
+  border-top: none !important;
+  border-bottom: none !important;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
+  margin: 0 8px;
+  border-radius: 12px !important;
+  margin-bottom: 4px;
+}
+
+.n-list-item::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  z-index: 0;
+  border-radius: 12px;
+}
+
+.n-list-item:hover::before {
+  opacity: 0.08;
+}
+
+.n-list-item.active::before {
+  opacity: 0.12;
+}
+
+.n-list-item > * {
+  position: relative;
+  z-index: 1;
+}
+
+.n-list-item:hover {
+  transform: translateX(4px);
+  box-shadow: 4px 0 20px rgba(102, 126, 234, 0.15);
+  border-color: transparent !important;
+}
+
+.n-list-item.active {
+  background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%) !important;
+  border-right: 4px solid #667eea !important;
+  transform: translateX(4px);
+  box-shadow: 4px 0 25px rgba(102, 126, 234, 0.25);
+}
+
+/* 会话名称和时间美化 */
+.n-list-item .n-ellipsis {
+  font-size: 15px !important;
+  font-weight: 500 !important;
+  color: #2c3e50 !important;
+  margin-bottom: 4px !important;
+}
+
+.n-list-item div[style*="font-size: 12px"] {
+  color: #7f8c8d !important;
+  font-weight: 400 !important;
+}
+
+/* 会话操作按钮美化 */
+.n-list-item .n-button {
+  opacity: 0 !important;
+  transition: all 0.3s ease !important;
+  transform: translateX(8px) !important;
+  border-radius: 8px !important;
+}
+
+.n-list-item:hover .n-button {
+  opacity: 0.7 !important;
+  transform: translateX(0) !important;
+}
+
+.n-list-item .n-button:hover {
+  opacity: 1 !important;
+  background: rgba(102, 126, 234, 0.1) !important;
+}
+
+/* 暗色模式下的会话列表 */
+html.dark .n-list-item {
+  border-bottom-color: rgba(255, 255, 255, 0.05) !important;
+}
+
+html.dark .n-list-item .n-ellipsis {
+  color: #e2e8f0 !important;
+}
+
+html.dark .n-list-item div[style*="font-size: 12px"] {
+  color: #94a3b8 !important;
+}
+
+html.dark .n-list-item .n-button:hover {
+  background: rgba(102, 126, 234, 0.2) !important;
+}
+
+/* 暗色模式下的展开按钮 */
+html.dark .n-layout-sider .n-layout-toggle-button {
+  background: rgba(30, 30, 30, 0.9) !important;
+  border-color: rgba(102, 126, 234, 0.3) !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3) !important;
+}
+
+html.dark .n-layout-sider .n-layout-toggle-button:hover {
+  background: rgba(102, 126, 234, 0.2) !important;
+  border-color: rgba(102, 126, 234, 0.5) !important;
+  box-shadow: 0 6px 20px rgba(102, 126, 234, 0.3) !important;
+}
+
+html.dark .n-layout-sider .n-layout-toggle-button .n-icon {
+  color: #667eea !important;
+}
+
+html.dark .n-layout-sider .n-layout-toggle-button:hover .n-icon {
+  color: #7c8aed !important;
+}
+
+/* 全面移除侧边栏白线的样式 */
+.n-layout-sider,
+.n-layout-sider *,
+.n-layout-sider::before,
+.n-layout-sider::after,
+.n-layout-sider .n-scrollbar,
+.n-layout-sider .n-scrollbar *,
+.n-layout-sider .n-list,
+.n-layout-sider .n-list * {
+  border-right: none !important;
+  box-shadow: none !important;
+}
+
+/* 特别针对可能的边框元素 */
+.n-layout-sider .n-layout-sider__border,
+.n-layout-sider .n-layout-sider-trigger,
+.n-layout-sider .n-divider,
+.n-layout-sider .n-border {
+  display: none !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+/* 暗色模式下也移除白线 */
+html.dark .n-layout-sider,
+html.dark .n-layout-sider *,
+html.dark .n-layout-sider::before,
+html.dark .n-layout-sider::after {
+  border-right: none !important;
+  box-shadow: none !important;
 }
 </style>
