@@ -32,6 +32,7 @@ import { useRouter } from 'vue-router'
 import { useSessionStore } from '../stores/session'
 import { useUserStore } from '../stores/user'
 import { createDiscreteApi } from 'naive-ui'
+import { messageAPI } from '../api'
 import ChatMessage from '../components/ChatMessage.vue'
 import MessageInput from '../components/MessageInput.vue'
 
@@ -80,13 +81,61 @@ watch(() => sessionStore.messages.map(m => m.content).join(''), () => {
   scrollToBottom()
 })
 
+// 创建消息的辅助函数
+const createMessage = (role, content) => ({
+  role,
+  content,
+  timestamp: new Date().toISOString()
+})
+
+// 发送消息并获取AI回复
+const sendMessageAndGetReply = async (messageContent) => {
+  try {
+    // 检查是否有会话ID
+    if (!sessionStore.sessionId) {
+      message.error('请先选择或创建一个会话')
+      return
+    }
+
+    // 添加用户消息
+    const userMessage = createMessage('user', messageContent)
+    sessionStore.addMessage(userMessage)
+    scrollToBottom()
+
+    // 发送消息到后端获取AI回复
+    const response = await messageAPI.send(sessionStore.sessionId, {
+      message: messageContent
+    })
+
+    // 添加AI回复
+    if (response && response.response) {
+      const assistantMessage = createMessage('assistant', response.response)
+      sessionStore.addMessage(assistantMessage)
+      scrollToBottom()
+    }
+  } catch (error) {
+    console.error('发送消息失败:', error)
+    message.error('发送消息失败，请重试')
+  }
+}
+
 // 发送问候消息
-const sendGreeting = () => {
-  sessionStore.addMessage({
-    role: 'user',
-    content: '你好',
-    timestamp: new Date().toISOString()
-  })
+const sendGreeting = async () => {
+  await sendMessageAndGetReply('你好！很高兴认识你 👋')
+}
+
+// 发送示例问题
+const sendExample = async () => {
+  const examples = [
+    '请帮我解释一下什么是人工智能？',
+    '能给我推荐一些学习编程的资源吗？',
+    '如何提高工作效率？',
+    '请介绍一下最新的科技趋势',
+    '能帮我制定一个学习计划吗？'
+  ]
+
+  const randomExample = examples[Math.floor(Math.random() * examples.length)]
+  await sendMessageAndGetReply(randomExample)
 }
 </script>
 
