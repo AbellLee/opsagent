@@ -11,7 +11,6 @@ import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import psycopg2
-import psycopg
 from psycopg2 import OperationalError
 from app.core.config import get_settings
 from app.core.logger import logger
@@ -100,12 +99,21 @@ def init_checkpointer_tables():
     try:
         # 注意：langgraph的PostgresSaver会在首次使用时自动创建检查点表
         # 我们只需要确保数据库连接正常即可
+        # 检查是否存在memory模块，如果不存在则跳过
+        import importlib.util
+        spec = importlib.util.find_spec("app.agent.memory")
+        if spec is None:
+            logger.warning("未找到app.agent.memory模块，跳过检查点表初始化")
+            return
+            
         from app.agent.memory import memory_manager
-        if memory_manager.checkpointer:
+        if memory_manager and hasattr(memory_manager, 'checkpointer') and memory_manager.checkpointer:
             memory_manager.setup()
             logger.info("检查点表初始化完成")
         else:
             logger.warning("检查点存储未初始化，跳过表初始化")
+    except ImportError as e:
+        logger.warning(f"无法导入memory模块: {e}，跳过检查点表初始化")
     except Exception as e:
         logger.error(f"初始化检查点表失败: {e}")
         raise
@@ -126,10 +134,12 @@ def main():
         create_tables()
         init_checkpointer_tables()
         logger.info("数据库初始化完成")
+        return True
     except Exception as e:
         logger.error(f"数据库初始化失败: {e}")
         return False
-    return True
 
 if __name__ == "__main__":
-    main()
+    success = main()
+    if not success:
+        sys.exit(1)
