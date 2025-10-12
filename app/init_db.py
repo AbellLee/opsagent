@@ -58,6 +58,7 @@ def create_tables():
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS user_sessions (
                 session_id UUID PRIMARY KEY,
+                session_name VARCHAR(100) NOT NULL DEFAULT '新建对话',
                 user_id UUID NOT NULL REFERENCES users(user_id),
                 created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 expires_at TIMESTAMP NOT NULL,
@@ -97,23 +98,14 @@ def create_tables():
 def init_checkpointer_tables():
     """初始化检查点表（由langgraph自动创建）"""
     try:
-        # 注意：langgraph的PostgresSaver会在首次使用时自动创建检查点表
-        # 我们只需要确保数据库连接正常即可
-        # 检查是否存在memory模块，如果不存在则跳过
-        import importlib.util
-        spec = importlib.util.find_spec("app.agent.memory")
-        if spec is None:
-            logger.warning("未找到app.agent.memory模块，跳过检查点表初始化")
-            return
-            
-        from app.agent.memory import memory_manager
-        if memory_manager and hasattr(memory_manager, 'checkpointer') and memory_manager.checkpointer:
-            memory_manager.setup()
+        # 直接使用 PostgresSaver 初始化检查点表
+        from langgraph.checkpoint.postgres import PostgresSaver
+        
+        with PostgresSaver.from_conn_string(settings.database_url) as checkpointer:
+            checkpointer.setup()
             logger.info("检查点表初始化完成")
-        else:
-            logger.warning("检查点存储未初始化，跳过表初始化")
-    except ImportError as e:
-        logger.warning(f"无法导入memory模块: {e}，跳过检查点表初始化")
+    except ImportError:
+        logger.warning("未安装 langgraph 或 langgraph-checkpoint-postgres，跳过检查点表初始化")
     except Exception as e:
         logger.error(f"初始化检查点表失败: {e}")
         raise
