@@ -15,13 +15,19 @@
         v-for="(message, index) in sessionStore.messages"
         :key="index"
         :message="message"
+        :isStreaming="isLastMessageStreaming && index === sessionStore.messages.length - 1"
         class="chat-message"
       />
     </div>
 
     <!-- 输入区域 -->
     <div class="input-container">
-      <MessageInput @send="scrollToBottom" class="message-input" />
+      <MessageInput
+        @send="scrollToBottom"
+        @streaming-start="isLastMessageStreaming = true"
+        @streaming-end="isLastMessageStreaming = false"
+        class="message-input"
+      />
     </div>
   </div>
 </template>
@@ -43,6 +49,7 @@ const userStore = useUserStore()
 
 // 组件状态
 const messagesContainer = ref(null)
+const isLastMessageStreaming = ref(false)
 
 // 滚动到底部
 const scrollToBottom = () => {

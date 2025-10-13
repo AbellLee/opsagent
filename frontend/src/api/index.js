@@ -58,7 +58,76 @@ export const sessionAPI = {
 // 消息相关 API
 export const messageAPI = {
   send: (sessionId, messageData) => apiClient.post(`/sessions/${sessionId}/chat`, messageData),
-  execute: (sessionId, messageData) => apiClient.post(`/sessions/${sessionId}/execute`, messageData)
+  execute: (sessionId, messageData) => apiClient.post(`/sessions/${sessionId}/execute`, messageData),
+
+  // 流式聊天API
+  sendStreaming: async (sessionId, messageData, onChunk, onComplete, onError) => {
+    try {
+      const response = await fetch(`/api/sessions/${sessionId}/chat`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          ...messageData,
+          response_mode: 'streaming'
+        })
+      })
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+
+      const reader = response.body.getReader()
+      const decoder = new TextDecoder()
+      let fullContent = ''
+
+      let buffer = ''
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        const chunk = decoder.decode(value, { stream: true })
+        buffer += chunk
+
+        // 处理完整的行
+        const lines = buffer.split('\n')
+        // 保留最后一行（可能不完整）
+        buffer = lines.pop() || ''
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const dataStr = line.slice(6).trim()
+            if (dataStr === '[DONE]') {
+              onComplete && onComplete(fullContent)
+              return fullContent
+            }
+
+            if (dataStr) {
+              try {
+                const chunkData = JSON.parse(dataStr)
+                if (chunkData.chunk) {
+                  fullContent += chunkData.chunk
+                  onChunk && onChunk(chunkData.chunk, fullContent, chunkData.is_final)
+                }
+
+                if (chunkData.is_final) {
+                  onComplete && onComplete(fullContent)
+                  return fullContent
+                }
+              } catch (e) {
+                console.error('解析JSON失败:', dataStr, e)
+              }
+            }
+          }
+        }
+      }
+    } catch (error) {
+      onError && onError(error)
+      throw error
+    }
+  }
 }
 
 // 工具相关 API

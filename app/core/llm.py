@@ -1,5 +1,4 @@
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
-from langchain_community.llms import Tongyi
 from typing import Optional, Tuple
 import logging
 import os
@@ -14,12 +13,6 @@ MODEL_CONFIGS = {
         "api_key_env": "LLM_API_KEY",  # 统一使用LLM_API_KEY
         "default_chat_model": "gpt-4o-mini",
         "default_embedding_model": "text-embedding-3-small"
-    },
-    "qwen": {
-        "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
-        "api_key_env": "LLM_API_KEY",  # 统一使用LLM_API_KEY
-        "default_chat_model": "qwen-plus",
-        "default_embedding_model": "text-embedding-v1"
     },
     "oneapi": {
         "base_url": None,  # 需要从环境变量获取
@@ -42,8 +35,10 @@ MODEL_CONFIGS = {
 }
 
 # 默认配置
-DEFAULT_LLM_TYPE = "qwen"
+DEFAULT_LLM_TYPE = "tongyi"
 DEFAULT_TEMPERATURE = 0.7
+DEFAULT_TIMEOUT = 60  # 默认60秒超时
+DEFAULT_MAX_RETRIES = 2  # 默认重试2次
 
 class LLMInitializationError(Exception):
     """自定义异常类用于LLM初始化错误"""
@@ -131,16 +126,25 @@ def initialize_llm(llm_type: str = DEFAULT_LLM_TYPE) -> Tuple[ChatOpenAI, OpenAI
         if not embedding_model and llm_type == "custom":
             raise ValueError(f"缺少embedding_model配置或环境变量")
 
-        # 特殊处理 tongyi 类型（使用专门的Tongyi类）
+        # 获取超时配置（可通过环境变量覆盖）
+        timeout = int(os.getenv("LLM_TIMEOUT", DEFAULT_TIMEOUT))
+        max_retries = int(os.getenv("LLM_MAX_RETRIES", DEFAULT_MAX_RETRIES))
+
+        # 特殊处理 tongyi 类型（使用ChatOpenAI兼容模式）
         if llm_type == "tongyi":
             # 确保dashscope相关的环境变量都设置好
             os.environ['DASHSCOPE_API_KEY'] = api_key
             if 'LLM_API_KEY' not in os.environ:
                 os.environ['LLM_API_KEY'] = api_key
-            
-            llm = Tongyi(
-                dashscope_api_key=api_key,
-                model_name=chat_model
+
+            # 使用ChatOpenAI兼容模式，支持流式输出
+            llm = ChatOpenAI(
+                base_url=base_url,
+                api_key=api_key,
+                model=chat_model,
+                timeout=timeout,
+                max_retries=max_retries,
+                streaming=True  # 启用流式支持
             )
             # Tongyi不支持嵌入模型，返回None
             return llm, None
@@ -151,8 +155,8 @@ def initialize_llm(llm_type: str = DEFAULT_LLM_TYPE) -> Tuple[ChatOpenAI, OpenAI
             api_key=api_key,
             model=chat_model,
             temperature=DEFAULT_TEMPERATURE,
-            timeout=30,
-            max_retries=2
+            timeout=timeout,
+            max_retries=max_retries
         )
 
         # 创建嵌入模型实例
@@ -162,7 +166,7 @@ def initialize_llm(llm_type: str = DEFAULT_LLM_TYPE) -> Tuple[ChatOpenAI, OpenAI
             model=embedding_model
         )
 
-        logger.info(f"成功初始化 {llm_type} LLM，模型: {chat_model}")
+        logger.info(f"成功初始化 {llm_type} LLM，模型: {chat_model}，超时: {timeout}秒，重试: {max_retries}次")
         return llm, embedding
 
     except ValueError as ve:

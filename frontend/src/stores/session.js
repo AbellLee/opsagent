@@ -30,6 +30,18 @@ export const useSessionStore = defineStore('session', {
     
     addMessage(message) {
       this.messages.push(message)
+      return this.messages.length - 1 // 返回消息索引
+    },
+
+    updateMessage(messageIndex, content) {
+      if (messageIndex >= 0 && messageIndex < this.messages.length) {
+        // 确保Vue能检测到变化，使用响应式更新
+        this.messages[messageIndex] = {
+          ...this.messages[messageIndex],
+          content: content,
+          timestamp: new Date().toISOString() // 添加时间戳确保变化
+        }
+      }
     },
     
     clearMessages() {

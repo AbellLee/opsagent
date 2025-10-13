@@ -37,18 +37,41 @@
         </div>
       </div>
 
-      <!-- 字数统计 -->
-      <div class="char-count-wrapper">
-        <span class="char-count" :class="{ warning: isNearLimit, error: isOverLimit }">
-          {{ inputValue.length }}/{{ maxLength }}
-        </span>
+      <!-- 响应模式选择和字数统计 -->
+      <div class="bottom-controls">
+        <div class="response-mode-wrapper">
+          <n-radio-group v-model:value="responseMode" size="small">
+            <n-radio-button value="blocking">
+              <n-icon size="14" style="margin-right: 4px;">
+                <svg viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2M12,4A8,8 0 0,1 20,12A8,8 0 0,1 12,20A8,8 0 0,1 4,12A8,8 0 0,1 12,4M12,6A6,6 0 0,0 6,12A6,6 0 0,0 12,18A6,6 0 0,0 18,12A6,6 0 0,0 12,6Z"/>
+                </svg>
+              </n-icon>
+              阻塞
+            </n-radio-button>
+            <n-radio-button value="streaming">
+              <n-icon size="14" style="margin-right: 4px;">
+                <svg viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M5,13L9,17L7.5,18.5L1,12L7.5,5.5L9,7L5,11H21V13H5M21,6V8H11V6H21M21,16V18H11V16H21Z"/>
+                </svg>
+              </n-icon>
+              流式
+            </n-radio-button>
+          </n-radio-group>
+        </div>
+
+        <div class="char-count-wrapper">
+          <span class="char-count" :class="{ warning: isNearLimit, error: isOverLimit }">
+            {{ inputValue.length }}/{{ maxLength }}
+          </span>
+        </div>
       </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, nextTick } from 'vue'
 import { useSessionStore } from '../stores/session'
 import { messageAPI } from '../api'
 import { createDiscreteApi } from 'naive-ui'
@@ -60,7 +83,7 @@ const MESSAGE_ROLE = {
 }
 
 // Emits
-const emit = defineEmits(['send'])
+const emit = defineEmits(['send', 'streaming-start', 'streaming-end'])
 
 // Store and API
 const { message: notification } = createDiscreteApi(['message'])
@@ -70,6 +93,7 @@ const sessionStore = useSessionStore()
 const inputValue = ref('')
 const sending = ref(false)
 const inputRef = ref(null)
+const responseMode = ref('streaming') // 默认使用流式模式
 
 // Configuration
 const maxLength = ref(2000)
@@ -99,6 +123,7 @@ const handleKeyDown = (event) => {
 
 // Methods
 const createMessage = (role, content) => ({
+  id: Date.now() + Math.random(), // 生成唯一ID
   role,
   content,
   timestamp: new Date().toISOString()
@@ -123,17 +148,13 @@ const sendMessage = async () => {
     // 通知父组件滚动到底部
     emit('send')
 
-    // 发送消息到后端
-    const response = await messageAPI.send(sessionStore.sessionId, {
-      message: messageContent
-    })
-
-    // 创建并添加助手消息
-    const assistantMessage = createMessage(MESSAGE_ROLE.ASSISTANT, response.response)
-    sessionStore.addMessage(assistantMessage)
-
-    // 再次通知父组件滚动到底部
-    emit('send')
+    if (responseMode.value === 'streaming') {
+      // 流式模式
+      await sendStreamingMessage(messageContent)
+    } else {
+      // 阻塞模式
+      await sendBlockingMessage(messageContent)
+    }
 
   } catch (error) {
     console.error('发送消息失败:', error)
@@ -145,6 +166,149 @@ const sendMessage = async () => {
     }
   } finally {
     sending.value = false
+  }
+}
+
+// 阻塞模式发送消息
+const sendBlockingMessage = async (messageContent) => {
+  const response = await messageAPI.send(sessionStore.sessionId, {
+    message: messageContent,
+    response_mode: 'blocking'
+  })
+
+  // 创建并添加助手消息
+  const assistantMessage = createMessage(MESSAGE_ROLE.ASSISTANT, response.response)
+  sessionStore.addMessage(assistantMessage)
+
+  // 通知父组件滚动到底部
+  emit('send')
+}
+
+// 流式模式发送消息
+const sendStreamingMessage = async (messageContent) => {
+  // 创建一个空的助手消息用于流式更新
+  const assistantMessage = createMessage(MESSAGE_ROLE.ASSISTANT, '')
+  const messageIndex = sessionStore.addMessage(assistantMessage)
+
+  // 通知开始流式输入
+  emit('streaming-start')
+
+  try {
+    // 先发送POST请求启动流式响应
+    const response = await fetch(`/api/sessions/${sessionStore.sessionId}/chat`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        message: messageContent,
+        response_mode: 'streaming'
+      })
+    })
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`)
+    }
+
+    // 使用EventSource处理SSE（更好的流式支持）
+    let fullContent = ''
+    let eventSource = null
+
+    // 创建一个Promise来处理EventSource
+    await new Promise((resolve, reject) => {
+      // 注意：EventSource不能直接使用POST，所以我们需要用Fetch的方式
+      // 但是我们可以优化Fetch的处理方式
+
+      const reader = response.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
+
+      const processStream = async () => {
+        try {
+          while (true) {
+            const { done, value } = await reader.read()
+            if (done) {
+              resolve()
+              break
+            }
+
+            const chunk = decoder.decode(value, { stream: true })
+            buffer += chunk
+
+            // 立即处理每个字符块，不等待完整行
+            const lines = buffer.split('\n')
+            buffer = lines.pop() || ''
+
+            for (const line of lines) {
+              // 处理SSE事件格式
+              if (line.startsWith('event: ')) {
+                const eventType = line.slice(7).trim()
+                console.log('SSE Event:', eventType)
+                continue
+              }
+
+              if (line.startsWith('data: ')) {
+                const dataStr = line.slice(6).trim()
+
+                if (dataStr === '[DONE]') {
+                  resolve()
+                  return
+                }
+
+                // 跳过非JSON数据（如连接事件）
+                if (dataStr === 'connected' || !dataStr.startsWith('{')) {
+                  continue
+                }
+
+                if (dataStr) {
+                  try {
+                    const chunkData = JSON.parse(dataStr)
+
+                    // 跳过连接测试消息
+                    if (chunkData.type === 'connection_established' || chunkData.type === 'test') {
+                      continue
+                    }
+
+                    if (chunkData.chunk) {
+                      // 累积内容
+                      fullContent += chunkData.chunk
+
+                      // 立即更新store - 这里是关键！
+                      sessionStore.updateMessage(messageIndex, fullContent)
+                      emit('send')
+
+                      // 强制DOM更新
+                      await nextTick()
+
+                      // 添加日志查看接收时间
+                      console.log(`接收chunk: ${chunkData.chunk} at ${new Date().toISOString()}`)
+                    }
+
+                    if (chunkData.is_final) {
+                      resolve()
+                      return
+                    }
+                  } catch (e) {
+                    console.error('解析JSON失败:', dataStr, e)
+                  }
+                }
+              }
+            }
+          }
+        } catch (error) {
+          reject(error)
+        }
+      }
+
+      processStream()
+    })
+
+  } catch (error) {
+    console.error('流式消息发送失败:', error)
+    sessionStore.updateMessage(messageIndex, '抱歉，消息发送失败，请重试。')
+  } finally {
+    emit('streaming-end')
+    emit('send')
   }
 }
 
@@ -236,11 +400,21 @@ onMounted(() => {
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
-/* 字数统计 */
-.char-count-wrapper {
+/* 底部控件 */
+.bottom-controls {
   display: flex;
-  justify-content: flex-end;
+  justify-content: space-between;
+  align-items: center;
   padding: 8px 12px 0;
+  gap: 12px;
+}
+
+.response-mode-wrapper {
+  flex-shrink: 0;
+}
+
+.char-count-wrapper {
+  flex-shrink: 0;
 }
 
 .char-count {
@@ -303,8 +477,21 @@ html.dark .char-count {
     height: 36px;
   }
 
-  .char-count-wrapper {
+  .bottom-controls {
     padding: 6px 8px 0;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  .response-mode-wrapper {
+    display: flex;
+    justify-content: center;
+  }
+
+  .char-count-wrapper {
+    display: flex;
+    justify-content: flex-end;
   }
 }
 </style>

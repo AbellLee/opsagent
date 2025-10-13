@@ -71,4 +71,19 @@ async def health_check():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+
+    # 配置uvicorn以支持真正的流式响应
+    uvicorn.run(
+        app,
+        host="0.0.0.0",
+        port=8000,
+        # 关键配置：禁用缓冲和优化流式传输
+        access_log=False,  # 禁用访问日志减少缓冲
+        timeout_keep_alive=1,  # 短超时
+        timeout_graceful_shutdown=1,
+        # 使用较小的限制来减少缓冲
+        limit_concurrency=50,
+        limit_max_requests=100,
+        # 禁用HTTP/1.1的keep-alive
+        h11_max_incomplete_event_size=16384,
+    )

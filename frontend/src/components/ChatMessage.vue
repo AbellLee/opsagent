@@ -25,6 +25,15 @@
         class="message-content"
         v-html="formattedContent"
       ></div>
+
+      <!-- 流式输入指示器 -->
+      <div v-if="isStreaming" class="streaming-indicator">
+        <span class="typing-dots">
+          <span></span>
+          <span></span>
+          <span></span>
+        </span>
+      </div>
     </div>
   </div>
 </template>
@@ -48,6 +57,10 @@ const props = defineProps({
       if (!value.role || typeof value.role !== 'string') return false
       return ['user', 'assistant', 'system'].includes(value.role)
     }
+  },
+  isStreaming: {
+    type: Boolean,
+    default: false
   }
 })
 
@@ -116,11 +129,45 @@ const headerColor = computed(() => {
   }
 })
 
+// 流式显示内容
+const streamingContent = ref('')
+const isStreamingActive = ref(false)
+
 // 处理消息内容，支持Markdown格式
 const formattedContent = computed(() => {
-  if (!props.message.content) return ''
-  return parseMarkdown(props.message.content)
+  const content = isStreamingActive.value ? streamingContent.value : props.message.content
+  if (!content) return ''
+  return parseMarkdown(content)
 })
+
+// 打字机效果
+const typewriterEffect = (targetText) => {
+  if (!props.isStreaming) {
+    streamingContent.value = targetText
+    return
+  }
+
+  const currentLength = streamingContent.value.length
+  const targetLength = targetText.length
+
+  if (currentLength >= targetLength) {
+    streamingContent.value = targetText
+    return
+  }
+
+  // 逐字显示
+  let index = currentLength
+  const animate = () => {
+    if (index < targetLength && props.isStreaming) {
+      const charsToAdd = Math.min(2, targetLength - index)
+      streamingContent.value = targetText.substring(0, index + charsToAdd)
+      index += charsToAdd
+      setTimeout(animate, 30) // 30ms间隔
+    }
+  }
+
+  animate()
+}
 
 // 用于触发代码高亮的引用
 const contentRef = ref(null)
@@ -192,8 +239,35 @@ onMounted(() => {
   highlightCode()
 })
 
-// 监听内容变化，重新高亮代码
-watch(() => props.message.content, () => {
+
+
+// 监听内容变化
+watch(() => props.message.content, (newContent, oldContent) => {
+  if (props.isStreaming && newContent !== oldContent) {
+    // 流式模式：使用打字机效果
+    isStreamingActive.value = true
+    typewriterEffect(newContent)
+  } else {
+    // 非流式模式：直接显示
+    isStreamingActive.value = false
+    streamingContent.value = newContent
+  }
+  highlightCode()
+})
+
+// 监听流式状态变化
+watch(() => props.isStreaming, (isStreaming) => {
+  if (!isStreaming) {
+    // 流式结束，显示完整内容
+    isStreamingActive.value = false
+    streamingContent.value = props.message.content
+    highlightCode()
+  }
+})
+
+// 在组件挂载后初始化
+onMounted(() => {
+  streamingContent.value = props.message.content
   highlightCode()
 })
 </script>
@@ -359,7 +433,43 @@ watch(() => props.message.content, () => {
   height: auto;
 }
 
+/* 流式输入指示器 */
+.streaming-indicator {
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+}
 
+.typing-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
 
+.typing-dots span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: #409eff;
+  animation: typing 1.4s infinite ease-in-out;
+}
 
+.typing-dots span:nth-child(1) {
+  animation-delay: -0.32s;
+}
+
+.typing-dots span:nth-child(2) {
+  animation-delay: -0.16s;
+}
+
+@keyframes typing {
+  0%, 80%, 100% {
+    transform: scale(0.8);
+    opacity: 0.5;
+  }
+  40% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
 </style>
