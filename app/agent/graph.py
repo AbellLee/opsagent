@@ -109,19 +109,41 @@ def call_model(state: AgentState, config: RunnableConfig, *, store: Optional[Bas
         messages: List[BaseMessage] = [SystemMessage(content=system_msg)]
         messages.extend(state["messages"])
 
-        # 使用LLM的invoke方法，LangGraph会自动处理流式输出
+        # 使用LLM进行调用，支持LangGraph的messages流式模式
         try:
             logger.info(f"开始调用模型，模型类型: {type(llm).__name__}")
 
-            # 直接调用LLM，LangGraph的stream_mode="messages"会自动处理流式
-            response = llm.invoke(messages)
-            logger.info("模型调用成功")
+            # 检查是否在流式上下文中
+            from langgraph.config import get_stream_writer
+            try:
+                writer = get_stream_writer()
+                logger.info("检测到流式上下文，使用流式调用")
 
-            # 确保返回AIMessage
-            if hasattr(response, 'content'):
-                ai_message = AIMessage(content=response.content)
-            else:
-                ai_message = AIMessage(content=str(response))
+                # 在流式上下文中，实时发送每个chunk
+                full_content = ""
+                for chunk in llm.stream(messages):
+                    if hasattr(chunk, 'content') and chunk.content:
+                        content = chunk.content
+                        full_content += content
+                        logger.info(f"LLM产生chunk: {repr(content)}")
+
+                        # 实时发送chunk到流式输出
+                        writer(chunk)
+
+                logger.info("流式模型调用成功")
+                ai_message = AIMessage(content=full_content)
+
+            except Exception as stream_error:
+                logger.info(f"非流式上下文或流式调用失败: {stream_error}")
+
+                # 回退到普通调用
+                response = llm.invoke(messages)
+                logger.info("模型调用成功")
+
+                if hasattr(response, 'content'):
+                    ai_message = AIMessage(content=response.content)
+                else:
+                    ai_message = AIMessage(content=str(response))
 
             return {"messages": [ai_message]}
 
