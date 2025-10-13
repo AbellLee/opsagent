@@ -125,7 +125,7 @@ def call_model(state: AgentState, config: RunnableConfig, *, store: Optional[Bas
                     if hasattr(chunk, 'content') and chunk.content:
                         content = chunk.content
                         full_content += content
-                        logger.info(f"LLM产生chunk: {repr(content)}")
+                        # logger.info(f"LLM产生chunk: {repr(content)}")
 
                         # 实时发送chunk到流式输出
                         writer(chunk)

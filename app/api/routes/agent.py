@@ -179,7 +179,7 @@ async def chat_with_agent(
 
         # 根据响应模式选择处理方式
         if request.response_mode == "streaming":
-            return _handle_streaming_chat(session_id, inputs, config)
+            return await _handle_streaming_chat(session_id, inputs, config)
         else:
             return await _handle_blocking_chat(session_id, inputs, config)
 
@@ -203,195 +203,93 @@ async def chat_with_agent(
 
 async def _handle_blocking_chat(session_id: UUID, inputs: Dict[str, Any], config: Dict[str, Any]) -> ChatCompletionResponse:
     """处理阻塞模式的聊天 - 使用LangGraph标准流程"""
-    try:
         # 按照LangGraph规范，使用PostgresSaver作为上下文管理器
-        with (
-            PostgresStore.from_conn_string(settings.database_url) as store,
-            PostgresSaver.from_conn_string(settings.database_url) as checkpointer,
+    with (
+        PostgresStore.from_conn_string(settings.database_url) as store,
+        PostgresSaver.from_conn_string(settings.database_url) as checkpointer,
+    ):
+        # 确保检查点表已创建
+        checkpointer.setup()
+
+        # 创建graph实例
+        graph = create_graph(checkpointer=checkpointer, store=store)
+
+        # 执行graph
+        result = graph.invoke(inputs, config)
+
+        # 提取响应内容
+        messages = result.get("messages", [])
+        if messages:
+            last_message = messages[-1]
+            response_content = last_message.content if hasattr(last_message, 'content') else str(last_message)
+        else:
+            response_content = "抱歉，没有收到回复。"
+
+        return ChatCompletionResponse(
+            session_id=str(session_id),
+            response=response_content,
+            status="success",
+            created_at=time.time(),
+            model="tongyi"
+        )
+
+
+async def _handle_streaming_chat(session_id: UUID, inputs: Dict[str, Any], config: Dict[str, Any]):
+    """处理流式模式的聊天 - 使用LangGraph标准流程进行流式输出"""
+    import asyncio
+    from starlette.responses import StreamingResponse
+    
+    async def generate_stream():
+        """生成SSE流式数据"""
+
+        from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+        from langgraph.store.postgres.aio import AsyncPostgresStore
+        
+        async with (
+            AsyncPostgresStore.from_conn_string(settings.database_url) as store,
+            AsyncPostgresSaver.from_conn_string(settings.database_url) as checkpointer,
         ):
             # 确保检查点表已创建
-            checkpointer.setup()
+            await checkpointer.setup()
 
             # 创建graph实例
             graph = create_graph(checkpointer=checkpointer, store=store)
-
-            # 执行graph
-            result = graph.invoke(inputs, config)
-
-            # 提取响应内容
-            messages = result.get("messages", [])
-            if messages:
-                last_message = messages[-1]
-                response_content = last_message.content if hasattr(last_message, 'content') else str(last_message)
-            else:
-                response_content = "抱歉，没有收到回复。"
-
-            return ChatCompletionResponse(
-                session_id=str(session_id),
-                response=response_content,
-                status="success",
-                created_at=time.time(),
-                model="tongyi"
-            )
-
-    except Exception as e:
-        logger.error(f"阻塞聊天失败: {e}")
-        raise HTTPException(status_code=500, detail=f"阻塞聊天失败: {str(e)}")
-
-def _handle_streaming_chat(session_id: UUID, inputs: Dict[str, Any], config: Dict[str, Any]) -> StreamingResponse:
-    """处理流式模式的聊天 - 使用LangGraph标准流程进行流式输出"""
-
-    def generate_stream():
-        """生成SSE流式数据"""
-        try:
-            # 按照LangGraph规范，使用PostgresSaver作为上下文管理器
-            with (
-                PostgresStore.from_conn_string(settings.database_url) as store,
-                PostgresSaver.from_conn_string(settings.database_url) as checkpointer,
-            ):
-                # 确保检查点表已创建
-                checkpointer.setup()
-
-                # 创建graph实例
-                graph = create_graph(checkpointer=checkpointer, store=store)
-
-                # 使用混合方案：在LangGraph框架内直接调用LLM的流式功能
-                logger.info(f"开始LangGraph流式处理，会话ID: {session_id}")
-
-                # 获取LLM实例并准备消息（与阻塞模式保持一致的逻辑）
-                from app.core.llm import get_llm
-                llm, _ = get_llm()
-
-                # 准备消息（包含系统消息和历史消息）
-                system_msg = "你是一个智能助手"
-                # 这里可以添加从store获取长期记忆的逻辑，与阻塞模式保持一致
-                messages = [SystemMessage(content=system_msg)]
-                messages.extend(inputs["messages"])
-
-                full_content = ""
-                has_content = False
-
-                # 根据模型类型选择合适的调用方式（与graph.py中的逻辑保持一致）
-                if hasattr(llm, 'dashscope_api_key') or type(llm).__name__ == 'Tongyi':
-                    # 对于Tongyi模型，使用字典格式
-                    formatted_messages = []
-                    for msg in messages:
-                        if isinstance(msg, SystemMessage):
-                            formatted_messages.append({"role": "system", "content": msg.content})
-                        elif isinstance(msg, HumanMessage):
-                            formatted_messages.append({"role": "user", "content": msg.content})
-                        elif isinstance(msg, AIMessage):
-                            formatted_messages.append({"role": "assistant", "content": msg.content})
-                        else:
-                            formatted_messages.append({"role": "user", "content": str(getattr(msg, 'content', str(msg)))})
-
-                    # 流式调用Tongyi模型
-                    stream = llm.stream(formatted_messages)
-                else:
-                    # 对于其他模型，使用BaseMessage对象列表
-                    stream = llm.stream(messages)
-
-                # 处理流式输出
-                for chunk in stream:
-                    try:
-                        # 提取chunk内容
-                        chunk_text = ""
-                        if hasattr(chunk, 'content'):
-                            chunk_text = chunk.content
-                        elif isinstance(chunk, str):
-                            chunk_text = chunk
-                        elif hasattr(chunk, 'text'):
-                            chunk_text = chunk.text
-                        else:
-                            chunk_text = str(chunk)
-
-                        if chunk_text:
-                            full_content += chunk_text
-                            has_content = True
-
-                            # 构造SSE数据
-                            chunk_response = ChunkChatCompletionResponse(
-                                session_id=str(session_id),
-                                chunk=chunk_text,
-                                status="streaming",
-                                created_at=time.time(),
-                                model="tongyi",
-                                is_final=False
-                            )
-
-                            # 发送SSE数据
-                            yield f"data: {chunk_response.model_dump_json()}\n\n"
-
-                    except Exception as chunk_error:
-                        logger.error(f"处理流式chunk失败: {chunk_error}")
-                        continue
-
-                # 保存完整响应到数据库（使用LangGraph的检查点机制）
-                if full_content:
-                    # 构造完整的AI消息并保存到graph状态
-                    ai_message = AIMessage(content=full_content)
-
-                    # 构造包含完整对话的输入，用于保存到检查点
-                    save_inputs = inputs.copy()
-                    save_inputs["messages"] = inputs["messages"] + [ai_message]
-
-                    # 使用graph.invoke保存最终状态到检查点
-                    try:
-                        graph.invoke(save_inputs, config)
-                        logger.info(f"已保存流式响应到检查点，长度: {len(full_content)} 字符")
-                    except Exception as save_error:
-                        logger.error(f"保存流式响应到检查点失败: {save_error}")
-
-                # 如果没有接收到任何内容，发送默认消息
-                if not has_content:
-                    default_response = ChunkChatCompletionResponse(
+            
+            # 使用异步方式处理graph.stream，直接转发LLM产生的chunk
+            async for chunk, metadata in graph.astream(inputs, config, stream_mode="messages"):
+                # 检查chunk是否有内容
+                if hasattr(chunk, 'content') and chunk.content:
+                    # 构造SSE数据
+                    chunk_response = ChunkChatCompletionResponse(
                         session_id=str(session_id),
-                        chunk="抱歉，没有收到回复。",
+                        chunk=chunk.content,
                         status="streaming",
                         created_at=time.time(),
                         model="tongyi",
                         is_final=False
                     )
-                    yield f"data: {default_response.model_dump_json()}\n\n"
 
-                logger.info(f"LangGraph流式处理完成，总长度: {len(full_content)} 字符")
-
-                # 发送最终完成信号
-                final_response = ChunkChatCompletionResponse(
-                    session_id=str(session_id),
-                    chunk="",
-                    status="completed",
-                    created_at=time.time(),
-                    model="tongyi",
-                    is_final=True
-                )
-                yield f"data: {final_response.model_dump_json()}\n\n"
-
-                # 发送结束标记
-                yield "data: [DONE]\n\n"
-
-        except Exception as e:
-            logger.error(f"流式聊天失败: {e}")
-            # 发送错误信息
-            error_response = ChunkChatCompletionResponse(
-                session_id=str(session_id),
-                chunk=f"错误: {str(e)}",
-                status="error",
-                created_at=time.time(),
-                model="tongyi",
-                is_final=True
-            )
-            yield f"data: {error_response.model_dump_json()}\n\n"
-            yield "data: [DONE]\n\n"
+                    # 发送SSE数据
+                    yield f"data: {chunk_response.model_dump_json()}\n\n"
+                    
+                    # 稍微延迟以实现打字机效果
+                    await asyncio.sleep(0.01)
+                
+                # 检查是否是结束信号
+                elif hasattr(chunk, 'response_metadata') and chunk.response_metadata.get('finish_reason') == 'stop':
+                    # 这是结束信号，跳出循环
+                    break
 
     # 返回StreamingResponse，设置正确的SSE headers
     return StreamingResponse(
         generate_stream(),
-        media_type="text/event-stream",
+        media_type="json/event-stream",
         headers={
             "Cache-Control": "no-cache",
             "Connection": "keep-alive",
             "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Headers": "Cache-Control"
+            "Access-Control-Allow-Headers": "Cache-Control",
+            "X-Accel-Buffering": "no",  # 禁用nginx缓冲
+            "Content-Encoding": "identity"  # 禁用压缩
         }
     )
