@@ -11,13 +11,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api import api_router
 from app.core.llm import get_llm, LLMInitializationError, set_pre_initialized_llm
 from app.core.logger import logger
-from app.agent.graph import create_graph
-from app.core.config import settings
-from app.core.instances import set_llm_instance, set_graph_instance
+
+from app.core.instances import set_llm_instance
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global checkpointer_instance
     
     # 启动时执行
     try:
@@ -28,15 +26,8 @@ async def lifespan(app: FastAPI):
         set_llm_instance(llm_instance, embedding_instance)
         logger.info("LLM初始化完成")
         
-        # 初始化graph（不带检查点）
-        logger.info("正在初始化Graph...")
-        try:
-            graph_instance = create_graph()
-            set_graph_instance(graph_instance)
-            logger.info("Graph初始化完成")
-        except Exception as e:
-            logger.error(f"Graph初始化失败: {e}")
-            logger.error(traceback.format_exc())
+        # Graph实例在需要时动态创建，无需预初始化
+        logger.info("Graph将在需要时动态创建")
     except LLMInitializationError as e:
         logger.error(f"LLM初始化失败: {e}")
     except Exception as e:

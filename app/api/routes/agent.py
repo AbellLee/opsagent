@@ -154,7 +154,7 @@ async def chat_with_agent(
             graph = create_graph(checkpointer=checkpointer, store=store)
             # 执行Agent图，并传入检查点配置
             result = graph.invoke(inputs, config, checkpointer=checkpointer)
-        logger.info(f"Agent图执行结果: {result}")
+        # logger.info(f"Agent图执行结果: {result}")
         
         # 提取响应消息
         messages = result.get("messages", [])
