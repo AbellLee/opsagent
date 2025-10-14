@@ -84,7 +84,7 @@ async def handle_blocking_chat(session_id: UUID, inputs: Dict[str, Any], config:
             elif message.get("type") == "tool_operation" and message.get("content"):
                 response_content = message.get("content")
                 break
-
+        logger.info(f"最后的回复内容: {response_content}")
         return ChatCompletionResponse(
             session_id=str(session_id),
             response=response_content,

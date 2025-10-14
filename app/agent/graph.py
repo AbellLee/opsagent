@@ -56,25 +56,17 @@ def call_model(state: AgentState, config: RunnableConfig, *, store: Optional[Bas
                 writer = get_stream_writer()
                 logger.info("检测到流式上下文，使用流式调用")
 
-                # 在流式上下文中，实时发送每个chunk
-                full_content = ""
-                tool_calls = []
-
+                full_response = None
                 for chunk in model_with_tools.stream(messages):
-                    if hasattr(chunk, 'content') and chunk.content:
-                        content = chunk.content
-                        full_content += content
-                        # logger.info(f"LLM产生chunk: {repr(content)}")
+                    writer(chunk)
+                    full_response = chunk if full_response is None else full_response + chunk
 
-                        # 实时发送chunk到流式输出
-                        writer(chunk)
-
-                    # 收集工具调用信息
-                    if hasattr(chunk, 'tool_calls') and chunk.tool_calls:
-                        tool_calls.extend(chunk.tool_calls)
-
+                ai_message = full_response  # 已包含 content 和 tool_calls
                 logger.info("流式模型调用成功")
-                ai_message = AIMessage(content=full_content, tool_calls=tool_calls)
+
+            except Exception as stream_error:
+                logger.info(f"非流式上下文或流式调用失败: {stream_error}")
+                ai_message = model_with_tools.invoke(messages)
 
             except Exception as stream_error:
                 logger.info(f"非流式上下文或流式调用失败: {stream_error}")

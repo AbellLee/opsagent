@@ -21,9 +21,9 @@ MODEL_CONFIGS = {
         "default_embedding_model": "text-embedding-v1"
     },
     "tongyi": {
-        "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        "base_url": None,  # 从环境变量LLM_URL获取
         "api_key_env": "LLM_API_KEY",  # 统一使用LLM_API_KEY，也兼容DASHSCOPE_API_KEY
-        "default_chat_model": "qwen-plus",
+        "default_chat_model": None,  # 从环境变量LLM_MODEL获取
         "default_embedding_model": "text-embedding-v1"
     },
     "custom": {
@@ -113,14 +113,15 @@ def initialize_llm(llm_type: str = DEFAULT_LLM_TYPE) -> Tuple[ChatOpenAI, OpenAI
             raise ValueError(f"缺少API密钥环境变量。已尝试查找: {', '.join(attempted_vars)}")
 
         # 获取base_url（如果需要）
-        base_url = config["base_url"] or os.getenv("LLM_BASE_URL")
-        if not base_url and llm_type == "custom":
-            raise ValueError(f"缺少base_url配置或环境变量")
+        base_url = config["base_url"] or os.getenv("LLM_URL") or os.getenv("LLM_BASE_URL")
+        if not base_url and llm_type in ["custom", "tongyi"]:
+            env_vars = ["LLM_URL", "LLM_BASE_URL"]
+            raise ValueError(f"缺少base_url配置或环境变量: {', '.join(env_vars)}")
 
         # 获取模型名称（优先使用环境变量LLM_MODEL，否则使用默认值）
         chat_model = os.getenv("LLM_MODEL") or config["default_chat_model"]
-        if not chat_model and llm_type == "custom":
-            raise ValueError(f"缺少chat_model配置或环境变量")
+        if not chat_model and llm_type in ["custom", "tongyi"]:
+            raise ValueError(f"缺少chat_model配置或环境变量LLM_MODEL")
 
         embedding_model = os.getenv("LLM_EMBEDDING_MODEL") or config["default_embedding_model"]
         if not embedding_model and llm_type == "custom":
