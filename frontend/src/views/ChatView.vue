@@ -84,7 +84,7 @@ watch(() => sessionStore.messages, () => {
 }, { deep: true })
 
 // 监听消息内容变化，特别是流式输出时
-watch(() => sessionStore.messages.map(m => m.content).join(''), () => {
+watch(() => sessionStore.messages.map(m => m?.content || '').join(''), () => {
   scrollToBottom()
 })
 

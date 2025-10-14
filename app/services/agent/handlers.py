@@ -78,9 +78,21 @@ async def handle_blocking_chat(session_id: UUID, inputs: Dict[str, Any], config:
 
         # 从合并后的消息中获取最后的回复
         for message in reversed(merged_messages):
-            if message.get("type") == "assistant" and message.get("content"):
-                response_content = message.get("content")
-                break
+            if message.get("type") == "assistant":
+                content = message.get("content")
+                if isinstance(content, list):
+                    # 新格式：从序列中提取所有文本内容
+                    text_parts = []
+                    for item in content:
+                        if item.get("type") == "text" and item.get("content"):
+                            text_parts.append(item.get("content"))
+                    if text_parts:
+                        response_content = "\n\n".join(text_parts)
+                        break
+                elif isinstance(content, str) and content:
+                    # 兼容旧格式：直接使用字符串内容
+                    response_content = content
+                    break
             elif message.get("type") == "tool_operation" and message.get("content"):
                 response_content = message.get("content")
                 break

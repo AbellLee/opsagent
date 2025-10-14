@@ -9,10 +9,10 @@ def get_db() -> Generator:
     conn = None
     try:
         # 记录当前加载的配置
-        logger.info(f"当前数据库配置URL: {settings.database_url}")
-        logger.info(f"尝试连接数据库...")
+        # logger.info(f"当前数据库配置URL: {settings.database_url}")
+        # logger.info(f"尝试连接数据库...")
         conn = psycopg2.connect(settings.database_url)
-        logger.info("数据库连接成功")
+        # logger.info("数据库连接成功")
         yield conn
     except Exception as e:
         error_msg = f"数据库连接失败: {e}"

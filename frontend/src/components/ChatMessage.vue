@@ -5,12 +5,7 @@
       <div v-if="showHeader" class="message-header">
         <div class="sender-info">
           <span class="sender-icon">{{ messageConfig.icon }}</span>
-          <span class="sender-name" :style="{ color: headerColor }">
-            {{ senderName }}
-          </span>
-          <span v-if="isToolMessage" class="tool-badge">
-            {{ getToolDisplayName() }}
-          </span>
+          <span class="sender-name">{{ senderName }}</span>
         </div>
         <div class="message-actions">
           <n-button text size="tiny" @click="copyToClipboard">
@@ -20,115 +15,55 @@
               </svg>
             </n-icon>
           </n-button>
-          <n-button v-if="canRetry" text size="tiny" @click="retryMessage">
-            <n-icon>
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M17.65,6.35C16.2,4.9 14.21,4 12,4A8,8 0 0,0 4,12A8,8 0 0,0 12,20C15.73,20 18.84,17.45 19.73,14H17.65C16.83,16.33 14.61,18 12,18A6,6 0 0,1 6,12A6,6 0 0,1 12,6C13.66,6 15.14,6.69 16.22,7.78L13,11H20V4L17.65,6.35Z"/>
-              </svg>
-            </n-icon>
-          </n-button>
         </div>
       </div>
 
-      <!-- 工具操作展示（合并的工具调用和结果） -->
-      <div v-if="isToolOperationMessage" class="tool-operation-content">
-        <!-- 第一行：标题和展开按钮 -->
-        <div class="tool-operation-header">
-          <span class="tool-operation-title">🔧 工具操作</span>
-          <n-button text size="tiny" @click="toggleToolOperationDetails">
-            {{ showToolOperationDetails ? '收起' : '展开' }}
-          </n-button>
-        </div>
+      <!-- Augment风格的序列化AI回复 -->
+      <div class="ai-message-container">
+        <!-- 按时间顺序展示内容序列 -->
+        <div v-if="hasContentSequence" class="content-sequence">
+          <div v-for="(item, index) in message.content" :key="index" class="sequence-item">
+            <!-- 工具调用项 -->
+            <div v-if="item.type === 'tool_call'" class="tool-call-item">
+              <div class="step-indicator" @click="toggleSequenceItem(index)">
+                <span class="step-icon">{{ getToolIcon(item?.name || 'default') }}</span>
+                <span class="step-name">{{ item?.name || '未知工具' }}</span>
+                <span class="step-status" :class="getToolStatusClass(item?.status || 'unknown')">
+                  {{ getToolStatusText(item?.status || 'unknown') }}
+                </span>
+                <n-button text size="tiny" class="expand-btn">
+                  {{ (item?.expanded) ? '收起' : '展开' }}
+                </n-button>
+              </div>
 
-        <!-- 第二行：简洁的工具信息 -->
-        <div v-if="!showToolOperationDetails" class="tool-operation-summary">
-          <span v-if="message.tool_calls && message.tool_calls.length > 0" class="tool-summary-item">
-            调用了 {{ message.tool_calls.length }} 个工具
-          </span>
-          <span v-if="message.tool_results && message.tool_results.length > 0" class="tool-summary-item">
-            {{ message.tool_results.length }} 个工具执行完成
-          </span>
-        </div>
-
-        <!-- 展开的详细信息 -->
-        <div v-if="showToolOperationDetails" class="tool-operation-details">
-          <!-- 工具调用部分 -->
-          <div v-if="message.tool_calls && message.tool_calls.length > 0" class="tool-calls-section">
-            <div class="section-title">调用工具</div>
-            <div class="tool-call-details">
-              <div v-for="(call, index) in message.tool_calls" :key="index" class="tool-call-item">
-                <div class="tool-name">{{ call.name }}</div>
-                <div class="tool-args">
-                  <pre>{{ JSON.stringify(call.args, null, 2) }}</pre>
+              <!-- 工具调用详情 -->
+              <div v-if="item?.expanded" class="step-details">
+                <div v-if="item?.args" class="step-args">
+                  <div class="detail-label">参数:</div>
+                  <pre class="detail-content">{{ JSON.stringify(item.args, null, 2) }}</pre>
+                </div>
+                <div v-if="item?.result" class="step-result">
+                  <div class="detail-label">结果:</div>
+                  <div class="detail-content">
+                    <pre v-if="isJsonContent(item.result)">{{ formatJsonContent(item.result) }}</pre>
+                    <div v-else v-html="parseMarkdown(String(item.result))"></div>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
 
-          <!-- 工具结果部分 -->
-          <div v-if="message.tool_results && message.tool_results.length > 0" class="tool-results-section">
-            <div class="section-title">执行结果</div>
-            <div class="tool-results-details">
-              <div v-for="(result, index) in message.tool_results" :key="index" class="tool-result-item">
-                <div class="tool-result-name">{{ result.tool_name }}</div>
-                <div class="tool-result-content">
-                  <pre v-if="checkIsJsonContent(result.content)">{{ formatJsonContent(result.content) }}</pre>
-                  <div v-else v-html="parseMarkdown(result.content)"></div>
-                </div>
-              </div>
+            <!-- 文本回复项 -->
+            <div v-else-if="item.type === 'text'" class="text-response-item">
+              <div class="text-content" v-html="parseMarkdown(item.content)"></div>
             </div>
           </div>
         </div>
 
-        <!-- AI回复内容 -->
-        <div v-if="message.content" class="tool-operation-message" v-html="formattedContent"></div>
-      </div>
-
-      <!-- 工具调用展示（独立显示，保持兼容性） -->
-      <div v-else-if="isToolCallMessage" class="tool-call-content">
-        <div class="tool-call-header">
-          <span class="tool-call-title">🔧 调用工具</span>
-          <n-button text size="tiny" @click="toggleToolDetails">
-            {{ showToolDetails ? '收起' : '展开' }}
-          </n-button>
-        </div>
-        <div v-if="showToolDetails" class="tool-call-details">
-          <div v-for="(call, index) in message.tool_calls" :key="index" class="tool-call-item">
-            <div class="tool-name">{{ call.name }}</div>
-            <div class="tool-args">
-              <pre>{{ JSON.stringify(call.args, null, 2) }}</pre>
-            </div>
-          </div>
-        </div>
-        <!-- 如果有内容，也显示 -->
-        <div v-if="message.content" class="tool-call-message" v-html="formattedContent"></div>
-      </div>
-
-      <!-- 工具结果展示（独立显示，保持兼容性） -->
-      <div v-else-if="isToolResultMessage" class="tool-result-content">
-        <div class="tool-result-header">
-          <span class="tool-result-title">📊 {{ message.tool_name }} 执行结果</span>
-          <n-button text size="tiny" @click="toggleToolResultDetails">
-            {{ showToolResultDetails ? '收起' : '展开' }}
-          </n-button>
-        </div>
-        <div
-          v-if="showToolResultDetails"
-          class="tool-result-body"
-          :class="{ 'tool-result-expanded': showToolResultDetails }"
-        >
-          <pre v-if="isJsonContent" class="tool-result-content-pre">{{ formattedJsonContent }}</pre>
-          <div v-else class="tool-result-content-div" v-html="formattedContent"></div>
-        </div>
-        <div v-else class="tool-result-preview">
-          <span class="tool-result-preview-text">
-            {{ getToolResultPreview() }}
-          </span>
+        <!-- 兼容旧格式：如果是字符串内容 -->
+        <div v-else-if="typeof message.content === 'string' && message.content" class="legacy-content">
+          <div ref="contentRef" class="message-content" v-html="formattedContent"></div>
         </div>
       </div>
-
-      <!-- 普通消息内容 -->
-      <div v-else ref="contentRef" class="message-content" v-html="formattedContent"></div>
 
       <!-- 流式输入指示器 -->
       <div v-if="isStreaming" class="streaming-indicator">
@@ -150,9 +85,10 @@ import {
   MESSAGE_TYPES,
   getMessageConfig,
   getToolIcon,
-  isToolMessage as checkIsToolMessage,
-  isJsonContent as checkIsJsonContent,
-  formatJsonContent
+  hasToolCalls,
+  isJsonContent,
+  formatJsonContent,
+  getToolStatusText
 } from '../constants/messageTypes'
 
 const props = defineProps({
@@ -182,9 +118,6 @@ const props = defineProps({
 })
 
 // 响应式数据
-const showToolDetails = ref(false)
-const showToolResultDetails = ref(false)
-const showToolOperationDetails = ref(false)
 const contentRef = ref(null)
 
 // 计算属性
@@ -198,25 +131,24 @@ const messageType = computed(() => {
   switch (props.message.role) {
     case 'user': return MESSAGE_TYPES.USER
     case 'assistant': return MESSAGE_TYPES.ASSISTANT
-    case 'tool': return MESSAGE_TYPES.TOOL_RESULT
-    case 'system': return MESSAGE_TYPES.ASSISTANT // 系统消息当作助手消息处理
     default: return MESSAGE_TYPES.ASSISTANT
   }
 })
+
 const messageConfig = computed(() => getMessageConfig(messageType.value))
 const showHeader = computed(() => messageConfig.value.showHeader)
-const isToolCallMessage = computed(() => messageType.value === MESSAGE_TYPES.TOOL_CALL)
-const isToolResultMessage = computed(() => messageType.value === MESSAGE_TYPES.TOOL_RESULT)
-const isToolOperationMessage = computed(() => messageType.value === MESSAGE_TYPES.TOOL_OPERATION)
-const isToolMessage = computed(() => checkIsToolMessage(messageType.value))
 
 const senderName = computed(() => {
   return props.message.sender || messageConfig.value.defaultSender || '未知'
 })
 
-const canRetry = computed(() => {
-  return isToolResultMessage.value && props.message.content.includes('error')
+// 检查是否有内容序列
+const hasContentSequence = computed(() => {
+  return Array.isArray(props.message?.content) && props.message.content.length > 0
 })
+
+// 兼容性：检查是否有工具调用（旧格式）
+const hasToolCallsComputed = computed(() => hasToolCalls(props.message))
 
 // 样式计算
 const messageRowStyle = computed(() => ({
@@ -236,26 +168,6 @@ const bubbleStyle = computed(() => ({
   marginRight: messageConfig.value.align === 'right' ? '0' : 'auto'
 }))
 
-const headerColor = computed(() => {
-  switch (messageType.value) {
-    case MESSAGE_TYPES.ASSISTANT: return '#409eff'
-    case MESSAGE_TYPES.TOOL_CALL: return '#fa8c16'
-    case MESSAGE_TYPES.TOOL_RESULT: return '#52c41a'
-    default: return '#409eff'
-  }
-})
-
-// 内容处理
-const isJsonContent = computed(() => {
-  if (!isToolResultMessage.value) return false
-  return checkIsJsonContent(props.message.content)
-})
-
-const formattedJsonContent = computed(() => {
-  if (!isJsonContent.value) return ''
-  return formatJsonContent(props.message.content)
-})
-
 // 流式显示内容
 const streamingContent = ref('')
 const isStreamingActive = ref(false)
@@ -267,67 +179,56 @@ const formattedContent = computed(() => {
   return parseMarkdown(content)
 })
 
-// 方法
-const getToolDisplayName = () => {
-  if (isToolCallMessage.value && props.message.tool_calls?.length > 0) {
-    return props.message.tool_calls[0].name
-  }
-  if (isToolResultMessage.value && props.message.tool_name) {
-    return props.message.tool_name
-  }
-  return ''
-}
-
-const toggleToolDetails = () => {
-  showToolDetails.value = !showToolDetails.value
-}
-
-const toggleToolResultDetails = () => {
-  showToolResultDetails.value = !showToolResultDetails.value
-}
-
-const toggleToolOperationDetails = () => {
-  showToolOperationDetails.value = !showToolOperationDetails.value
-}
-
-const getToolResultPreview = () => {
-  const content = props.message.content || ''
-
-  // 如果是JSON内容，显示简化的预览
-  if (isJsonContent.value) {
-    try {
-      const parsed = JSON.parse(content)
-      if (typeof parsed === 'object') {
-        const keys = Object.keys(parsed)
-        if (keys.length > 0) {
-          return `{ ${keys.slice(0, 3).join(', ')}${keys.length > 3 ? '...' : ''} }`
-        }
+// 序列项切换方法
+const toggleSequenceItem = (index) => {
+  if (Array.isArray(props.message?.content) && props.message.content[index]) {
+    const item = props.message.content[index]
+    if (item.type === 'tool_call') {
+      // 确保expanded属性存在，如果不存在则初始化为false
+      if (typeof item.expanded === 'undefined') {
+        item.expanded = false
       }
-      return 'JSON 数据'
-    } catch {
-      return '数据格式错误'
+      item.expanded = !item.expanded
     }
   }
+}
 
-  // 对于普通文本，显示前100个字符
-  if (content.length > 100) {
-    return content.substring(0, 100) + '...'
+// 兼容性：工具调用相关方法（旧格式）
+const toggleToolCall = (index) => {
+  if (props.message?.tool_calls && props.message.tool_calls[index]) {
+    // 确保expanded属性存在，如果不存在则初始化为false
+    const toolCall = props.message.tool_calls[index]
+    if (typeof toolCall.expanded === 'undefined') {
+      toolCall.expanded = false
+    }
+    // 切换展开状态
+    toolCall.expanded = !toolCall.expanded
   }
+}
 
-  return content || '无内容'
+const getToolStatusClass = (status) => {
+  switch (status) {
+    case 'calling':
+      return 'status-calling'
+    case 'completed':
+      return 'status-completed'
+    case 'failed':
+      return 'status-failed'
+    default:
+      return 'status-unknown'
+  }
 }
 
 const copyToClipboard = async () => {
   try {
     let textToCopy = props.message.content
 
-    // 如果是工具调用，复制工具调用信息
-    if (isToolCallMessage.value && props.message.tool_calls) {
-      textToCopy = JSON.stringify(props.message.tool_calls, null, 2)
-    }
-    // 如果是工具结果且是JSON，复制格式化的JSON
-    else if (isToolResultMessage.value && isJsonContent.value) {
-      textToCopy = formattedJsonContent.value
+    // 如果有工具调用，也包含工具调用信息
+    if (props.message.tool_calls && props.message.tool_calls.length > 0) {
+      const toolInfo = props.message.tool_calls.map(call =>
+        `工具: ${call.name}\n参数: ${JSON.stringify(call.args, null, 2)}\n结果: ${call.result || '无结果'}`
+      ).join('\n\n')
+      textToCopy = `${textToCopy}\n\n工具调用信息:\n${toolInfo}`
     }
 
     await navigator.clipboard.writeText(textToCopy)
@@ -341,14 +242,6 @@ const copyToClipboard = async () => {
     message.error('复制失败')
   }
 }
-
-const retryMessage = () => {
-  // 重试逻辑 - 通过事件向父组件发送重试请求
-  emit('retry-message', props.message)
-}
-
-// 定义事件
-const emit = defineEmits(['retry-message'])
 
 // 打字机效果
 const typewriterEffect = (targetText) => {
@@ -381,19 +274,34 @@ const typewriterEffect = (targetText) => {
 
 // 高亮代码的函数
 const highlightCode = async () => {
-  if (contentRef.value) {
-    // 使用nextTick确保DOM更新完成后再执行高亮
-    await nextTick()
+  // 使用nextTick确保DOM更新完成后再执行高亮
+  await nextTick()
 
-    // 让Prism处理所有代码块
-    if (window.Prism) {
-      window.Prism.highlightAllUnder(contentRef.value)
+  // 查找所有可能包含代码的容器
+  const containers = []
+  if (contentRef.value) {
+    containers.push(contentRef.value)
+  }
+
+  // 查找序列化内容中的容器
+  const sequenceContainers = document.querySelectorAll('.content-sequence .text-content, .legacy-content .message-content')
+  sequenceContainers.forEach(container => containers.push(container))
+
+  // 对每个容器执行代码高亮
+  containers.forEach(container => {
+    if (container && window.Prism) {
+      try {
+        window.Prism.highlightAllUnder(container)
+      } catch (error) {
+        console.warn('Prism代码高亮失败:', error)
+      }
     }
 
     // 处理Mermaid图表
-    const mermaidElements = contentRef.value.querySelectorAll('.mermaid')
-    if (mermaidElements.length > 0 && window.mermaid) {
-      try {
+    if (container) {
+      const mermaidElements = container.querySelectorAll('.mermaid')
+      if (mermaidElements.length > 0 && window.mermaid) {
+        try {
         // 添加一个小延迟确保DOM完全渲染
         await new Promise(resolve => setTimeout(resolve, 100))
 
@@ -424,9 +332,10 @@ const highlightCode = async () => {
             <pre>${element.textContent}</pre>
           </div>`
         })
+        }
       }
     }
-  }
+  })
 }
 
 // 在组件挂载后触发代码高亮
@@ -1020,6 +929,228 @@ onMounted(() => {
   40% {
     transform: scale(1);
     opacity: 1;
+  }
+}
+
+/* Augment风格的完整AI消息样式 */
+.ai-message-container {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.content-sequence {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.sequence-item {
+  position: relative;
+}
+
+.tool-call-item {
+  border-left: 3px solid #1890ff;
+  padding-left: 16px;
+  position: relative;
+}
+
+.tool-call-item::before {
+  content: '';
+  position: absolute;
+  left: -6px;
+  top: 12px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #1890ff;
+  border: 2px solid white;
+  box-shadow: 0 0 0 1px #e8e8e8;
+}
+
+.text-response-item {
+  padding: 8px 0;
+}
+
+.text-content {
+  font-size: 14px;
+  line-height: 1.6;
+  color: #333;
+}
+
+/* 兼容性样式保留 */
+.legacy-content {
+  padding: 8px 0;
+}
+
+.legacy-content .message-content {
+  font-size: 14px;
+  line-height: 1.6;
+  color: #333;
+}
+
+.step-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+  cursor: pointer;
+  transition: all 0.2s;
+  border-radius: 4px;
+}
+
+.step-indicator:hover {
+  background: rgba(24, 144, 255, 0.05);
+  padding: 8px 12px;
+  margin: 0 -12px;
+}
+
+.step-icon {
+  font-size: 14px;
+  width: 20px;
+  text-align: center;
+  color: #1890ff;
+}
+
+.step-name {
+  flex: 1;
+  font-size: 14px;
+  color: #333;
+  font-weight: 500;
+}
+
+.step-status {
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.status-calling {
+  background: #fff7e6;
+  color: #fa8c16;
+  border: 1px solid #ffd591;
+}
+
+.status-calling::before {
+  content: '●';
+  animation: pulse 1.5s infinite;
+  margin-right: 4px;
+}
+
+.status-completed {
+  background: #f6ffed;
+  color: #52c41a;
+  border: 1px solid #b7eb8f;
+}
+
+.status-completed::before {
+  content: '✓';
+  margin-right: 4px;
+}
+
+.status-failed {
+  background: #fff2f0;
+  color: #ff4d4f;
+  border: 1px solid #ffccc7;
+}
+
+.status-failed::before {
+  content: '✗';
+  margin-right: 4px;
+}
+
+.status-unknown {
+  background: #f0f0f0;
+  color: #999;
+  border: 1px solid #d9d9d9;
+}
+
+.expand-btn {
+  opacity: 0.6;
+  transition: opacity 0.2s;
+  font-size: 12px;
+}
+
+.step-indicator:hover .expand-btn {
+  opacity: 1;
+}
+
+.step-details {
+  margin-top: 12px;
+  padding: 16px;
+  background: #fafafa;
+  border-radius: 8px;
+  border: 1px solid #f0f0f0;
+  margin-left: 28px;
+}
+
+.step-args,
+.step-result,
+.step-error {
+  margin-bottom: 12px;
+}
+
+.step-args:last-child,
+.step-result:last-child,
+.step-error:last-child {
+  margin-bottom: 0;
+}
+
+.ai-response-content {
+  padding-top: 8px;
+}
+
+.ai-response-content .message-content {
+  font-size: 14px;
+  line-height: 1.6;
+  color: #333;
+}
+
+.detail-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #666;
+  margin-bottom: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.detail-content {
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.detail-content pre {
+  background: #f8f8f8;
+  padding: 8px;
+  border-radius: 4px;
+  font-family: 'Courier New', monospace;
+  font-size: 12px;
+  overflow-x: auto;
+  margin: 0;
+  white-space: pre-wrap;
+  border: 1px solid #e8e8e8;
+}
+
+.error-text {
+  color: #ff4d4f;
+  background: #fff2f0;
+  padding: 8px;
+  border-radius: 4px;
+  border-left: 3px solid #ff4d4f;
+}
+
+/* 移除旧的ai-response样式，已被ai-response-content替代 */
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
   }
 }
 </style>

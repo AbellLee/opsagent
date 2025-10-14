@@ -1,12 +1,9 @@
 /**
- * 消息类型常量定义
+ * 消息类型常量定义 - 简化版本，参考Augment风格
  */
 export const MESSAGE_TYPES = {
   USER: 'user',
-  ASSISTANT: 'assistant',
-  TOOL_CALL: 'tool_call',
-  TOOL_RESULT: 'tool_result',
-  TOOL_OPERATION: 'tool_operation'  // 新增：工具操作（包含调用和结果）
+  ASSISTANT: 'assistant'
 }
 
 /**
@@ -22,35 +19,11 @@ export const MESSAGE_CONFIG = {
     defaultSender: '用户'
   },
   [MESSAGE_TYPES.ASSISTANT]: {
-    align: 'left', 
+    align: 'left',
     bgColor: '#f0f5ff',
     textColor: '#333',
     showHeader: true,
     icon: '🤖',
-    defaultSender: 'AI助手'
-  },
-  [MESSAGE_TYPES.TOOL_CALL]: {
-    align: 'left',
-    bgColor: '#fff7e6', 
-    textColor: '#333',
-    showHeader: true,
-    icon: '🔧',
-    defaultSender: 'AI助手'
-  },
-  [MESSAGE_TYPES.TOOL_RESULT]: {
-    align: 'left',
-    bgColor: '#f6ffed',
-    textColor: '#333',
-    showHeader: true,
-    icon: '📊',
-    defaultSender: '工具执行结果'
-  },
-  [MESSAGE_TYPES.TOOL_OPERATION]: {
-    align: 'left',
-    bgColor: '#f0f5ff',
-    textColor: '#333',
-    showHeader: true,
-    icon: '🔧',
     defaultSender: 'AI助手'
   }
 }
@@ -61,7 +34,18 @@ export const MESSAGE_CONFIG = {
 export const TOOL_ICONS = {
   calculator: '🧮',
   web_search: '🔍',
+  file_search: '📁',
+  code_search: '💻',
   default: '🔧'
+}
+
+/**
+ * 工具调用状态
+ */
+export const TOOL_STATUS = {
+  CALLING: 'calling',
+  COMPLETED: 'completed',
+  FAILED: 'failed'
 }
 
 /**
@@ -94,14 +78,34 @@ export function getMessageConfig(messageType) {
 }
 
 /**
- * 检查是否为工具相关消息
- * @param {string} messageType - 消息类型
- * @returns {boolean} 是否为工具消息
+ * 检查消息是否包含工具调用
+ * @param {object} message - 消息对象
+ * @returns {boolean} 是否包含工具调用
  */
-export function isToolMessage(messageType) {
-  return messageType === MESSAGE_TYPES.TOOL_CALL ||
-         messageType === MESSAGE_TYPES.TOOL_RESULT ||
-         messageType === MESSAGE_TYPES.TOOL_OPERATION
+export function hasToolCalls(message) {
+  return message && message.tool_calls && Array.isArray(message.tool_calls) && message.tool_calls.length > 0
+}
+
+/**
+ * 获取工具调用状态显示文本
+ * @param {string} status - 工具状态
+ * @returns {string} 状态显示文本
+ */
+export function getToolStatusText(status) {
+  switch (status) {
+    case TOOL_STATUS.CALLING:
+    case 'calling':
+      return '执行中...'
+    case TOOL_STATUS.COMPLETED:
+    case 'completed':
+      return '已完成'
+    case TOOL_STATUS.FAILED:
+    case 'failed':
+      return '执行失败'
+    case 'unknown':
+    default:
+      return '未知状态'
+  }
 }
 
 /**
@@ -129,5 +133,24 @@ export function formatJsonContent(content) {
     return JSON.stringify(JSON.parse(content), null, 2)
   } catch {
     return content
+  }
+}
+
+/**
+ * 创建标准消息对象
+ * @param {string} type - 消息类型
+ * @param {string} content - 消息内容
+ * @param {object} extraProps - 额外属性
+ * @returns {object} 标准消息对象
+ */
+export function createMessage(type, content, extraProps = {}) {
+  return {
+    id: Date.now() + Math.random(),
+    type,
+    role: type, // 保持向后兼容
+    content,
+    timestamp: new Date().toISOString(),
+    sender: type === MESSAGE_TYPES.USER ? '用户' : 'AI助手',
+    ...extraProps
   }
 }

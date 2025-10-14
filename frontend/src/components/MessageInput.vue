@@ -125,10 +125,7 @@ const createMessage = (type, content, extraProps = {}) => ({
   role: type === MESSAGE_TYPES.USER ? 'user' : 'assistant', // 保持向后兼容
   content,
   timestamp: new Date().toISOString(),
-  sender: type === MESSAGE_TYPES.USER ? '用户' :
-          type === MESSAGE_TYPES.TOOL_CALL ? 'AI助手' :
-          type === MESSAGE_TYPES.TOOL_RESULT ? `工具: ${extraProps.tool_name || '未知工具'}` :
-          'AI助手',
+  sender: type === MESSAGE_TYPES.USER ? '用户' : 'AI助手',
   ...extraProps // 合并额外属性
 })
 
@@ -221,9 +218,7 @@ const sendStreamingMessage = async (messageContent) => {
 
     // 使用EventSource处理SSE（更好的流式支持）
     let currentMessageIndex = null
-    let currentMessageType = null
-    let fullContent = ''
-    let toolOperationMessage = null  // 用于存储工具操作消息
+    let currentAIMessage = null  // 当前的AI消息（可能包含工具调用）
 
     // 创建一个Promise来处理EventSource
     await new Promise((resolve, reject) => {
@@ -280,86 +275,84 @@ const sendStreamingMessage = async (messageContent) => {
                       continue
                     }
 
-                    // 根据消息类型处理不同的消息
+                    // 根据消息类型处理不同的消息 - Augment风格简化处理
                     const messageType = chunkData.message_type || 'assistant'
 
-                    // 处理工具相关消息的合并逻辑
                     if (messageType === 'tool_call') {
-                      // 调试：打印接收到的工具调用数据
-                      console.log('前端接收到工具调用数据:', chunkData)
-                      console.log('工具调用列表:', chunkData.tool_calls)
-                      if (chunkData.tool_calls) {
-                        chunkData.tool_calls.forEach((call, index) => {
-                          console.log(`工具调用 ${index}:`, call)
-                          console.log(`工具名称: ${call.name}`)
-                          console.log(`工具参数:`, call.args)
-                        })
+                      // 创建新的AI消息，使用序列化内容结构
+                      if (!currentAIMessage) {
+                        currentAIMessage = createMessage(MESSAGE_TYPES.ASSISTANT, [])
+                        currentMessageIndex = sessionStore.addMessage(currentAIMessage)
                       }
 
-                      // 创建或更新工具操作消息
-                      if (!toolOperationMessage) {
-                        toolOperationMessage = createMessage(MESSAGE_TYPES.TOOL_OPERATION, chunkData.chunk || '', {
-                          tool_calls: chunkData.tool_calls || [],
-                          tool_results: [],
-                          current_step: 'calling'
+                      // 添加工具调用到内容序列中
+                      if (chunkData.tool_calls) {
+                        chunkData.tool_calls.forEach(toolCall => {
+                          const toolCallEntry = {
+                            type: 'tool_call',
+                            id: toolCall.id || '',
+                            name: toolCall.name || '',
+                            args: toolCall.args || {},
+                            result: null,
+                            status: 'calling',
+                            expanded: false
+                          }
+                          currentAIMessage.content.push(toolCallEntry)
                         })
-                        currentMessageIndex = sessionStore.addMessage(toolOperationMessage)
-                        currentMessageType = 'tool_operation'
-                        fullContent = chunkData.chunk || ''
-                      } else {
-                        // 更新工具调用内容
-                        fullContent += chunkData.chunk || ''
-                        toolOperationMessage.content = fullContent
-                        sessionStore.updateMessage(currentMessageIndex, fullContent)
+                        // 更新消息
+                        sessionStore.messages[currentMessageIndex] = { ...currentAIMessage }
                       }
                     } else if (messageType === 'tool_result') {
-                      // 将工具结果添加到现有的工具操作消息中
-                      if (toolOperationMessage) {
-                        if (!toolOperationMessage.tool_results) {
-                          toolOperationMessage.tool_results = []
+                      // 更新对应工具调用的结果
+                      if (currentAIMessage && Array.isArray(currentAIMessage.content)) {
+                        const toolCallId = chunkData.tool_call_id || ''
+                        const toolResult = chunkData.chunk || ''
+
+                        // 查找对应的工具调用并更新结果
+                        for (const item of currentAIMessage.content) {
+                          if (item.type === 'tool_call' && item.id === toolCallId) {
+                            item.status = 'completed'
+                            item.result = toolResult
+                            break
+                          }
                         }
-                        toolOperationMessage.tool_results.push({
-                          tool_name: chunkData.tool_name || '',
-                          tool_call_id: chunkData.tool_call_id || '',
-                          content: chunkData.chunk || ''
-                        })
-                        toolOperationMessage.current_step = 'completed'
 
                         // 更新消息
-                        sessionStore.messages[currentMessageIndex] = { ...toolOperationMessage }
-                      } else {
-                        // 如果没有工具调用消息，创建独立的工具结果消息
-                        const newMessage = createMessage(MESSAGE_TYPES.TOOL_RESULT, chunkData.chunk || '', {
-                          tool_name: chunkData.tool_name || '',
-                          tool_call_id: chunkData.tool_call_id || ''
-                        })
-                        currentMessageIndex = sessionStore.addMessage(newMessage)
-                        currentMessageType = messageType
-                        fullContent = chunkData.chunk || ''
+                        sessionStore.messages[currentMessageIndex] = { ...currentAIMessage }
                       }
                     } else {
-                      // 处理普通助手消息
-                      if (toolOperationMessage && toolOperationMessage.current_step === 'completed') {
-                        // 如果有已完成的工具操作，将AI回复作为工具操作的回复内容
+                      // 处理AI回复内容
+                      if (currentAIMessage) {
+                        // 添加内容到现有的AI消息
                         if (chunkData.chunk) {
-                          toolOperationMessage.content += chunkData.chunk
-                          sessionStore.messages[currentMessageIndex] = { ...toolOperationMessage }
+                          // 如果content是数组（新格式），处理序列化内容
+                          if (Array.isArray(currentAIMessage.content)) {
+                            const lastItem = currentAIMessage.content[currentAIMessage.content.length - 1]
+                            if (lastItem && lastItem.type === 'text') {
+                              lastItem.content += chunkData.chunk
+                            } else {
+                              const textEntry = {
+                                type: 'text',
+                                content: chunkData.chunk,
+                                status: 'completed'
+                              }
+                              currentAIMessage.content.push(textEntry)
+                            }
+                          } else {
+                            // 兼容旧格式：字符串内容
+                            currentAIMessage.content += chunkData.chunk
+                          }
+                          sessionStore.messages[currentMessageIndex] = { ...currentAIMessage }
                         }
                       } else {
-                        // 处理独立的助手消息
-                        if (currentMessageType !== messageType) {
-                          currentMessageType = messageType
-                          fullContent = ''
-                          toolOperationMessage = null  // 重置工具操作消息
-
-                          const newMessage = createMessage(MESSAGE_TYPES.ASSISTANT, chunkData.chunk || '')
-                          currentMessageIndex = sessionStore.addMessage(newMessage)
+                        // 创建新的AI消息（没有工具调用的情况）
+                        const textEntry = {
+                          type: 'text',
+                          content: chunkData.chunk || '',
+                          status: 'completed'
                         }
-
-                        if (chunkData.chunk) {
-                          fullContent += chunkData.chunk
-                          sessionStore.updateMessage(currentMessageIndex, fullContent)
-                        }
+                        currentAIMessage = createMessage(MESSAGE_TYPES.ASSISTANT, [textEntry])
+                        currentMessageIndex = sessionStore.addMessage(currentAIMessage)
                       }
                     }
 
@@ -369,14 +362,9 @@ const sendStreamingMessage = async (messageContent) => {
                     // 强制DOM更新
                     await nextTick()
 
-                    // 添加日志查看接收时间
-                    if (chunkData.chunk) {
-                      console.log(`接收${messageType}消息chunk: ${chunkData.chunk} at ${new Date().toISOString()}`)
-                    }
-
                     if (chunkData.is_final) {
-                      // 流结束时重置工具操作消息
-                      toolOperationMessage = null
+                      // 流结束时重置状态
+                      currentAIMessage = null
                       resolve()
                       return
                     }
