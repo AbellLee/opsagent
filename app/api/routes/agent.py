@@ -236,49 +236,83 @@ async def _handle_blocking_chat(session_id: UUID, inputs: Dict[str, Any], config
 
 async def _handle_streaming_chat(session_id: UUID, inputs: Dict[str, Any], config: Dict[str, Any]):
     """处理流式模式的聊天 - 使用LangGraph标准流程进行流式输出"""
-    import asyncio
     from starlette.responses import StreamingResponse
     
-    async def generate_stream():
+    def generate_stream():
         """生成SSE流式数据"""
 
-        from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
-        from langgraph.store.postgres.aio import AsyncPostgresStore
-        
-        async with (
-            AsyncPostgresStore.from_conn_string(settings.database_url) as store,
-            AsyncPostgresSaver.from_conn_string(settings.database_url) as checkpointer,
+        with (
+            PostgresStore.from_conn_string(settings.database_url) as store,
+            PostgresSaver.from_conn_string(settings.database_url) as checkpointer,
         ):
-            # 确保检查点表已创建
-            await checkpointer.setup()
 
             # 创建graph实例
             graph = create_graph(checkpointer=checkpointer, store=store)
             
             # 使用异步方式处理graph.stream，直接转发LLM产生的chunk
-            async for chunk, metadata in graph.astream(inputs, config, stream_mode="messages"):
-                # 检查chunk是否有内容
-                if hasattr(chunk, 'content') and chunk.content:
-                    # 构造SSE数据
-                    chunk_response = ChunkChatCompletionResponse(
+            # 重要：不要中途break，让LangGraph完整执行以确保状态正确保存
+            try:
+                stream_finished = False
+                for chunk, _ in graph.stream(inputs, config, stream_mode="messages"):
+                    # 检查chunk是否有内容
+                    if hasattr(chunk, 'content') and chunk.content:
+                        # 构造SSE数据
+                        chunk_response = ChunkChatCompletionResponse(
+                            session_id=str(session_id),
+                            chunk=chunk.content,
+                            status="streaming",
+                            created_at=time.time(),
+                            model="tongyi",
+                            is_final=False
+                        )
+
+                        # 发送SSE数据
+                        yield f"data: {chunk_response.model_dump_json()}\n\n"
+
+
+                    # 检查是否是结束信号，但不要break，让图完整执行
+                    elif hasattr(chunk, 'response_metadata') and chunk.response_metadata.get('finish_reason') == 'stop':
+                        # 标记流已结束，但继续让图执行完毕
+                        if not stream_finished:
+                            stream_finished = True
+                            final_response = ChunkChatCompletionResponse(
+                                session_id=str(session_id),
+                                chunk="",
+                                status="completed",
+                                created_at=time.time(),
+                                model="tongyi",
+                                is_final=True
+                            )
+                            yield f"data: {final_response.model_dump_json()}\n\n"
+
+                # 图执行完毕后，如果还没有发送结束信号，则发送
+                if not stream_finished:
+                    final_response = ChunkChatCompletionResponse(
                         session_id=str(session_id),
-                        chunk=chunk.content,
-                        status="streaming",
+                        chunk="",
+                        status="completed",
                         created_at=time.time(),
                         model="tongyi",
-                        is_final=False
+                        is_final=True
                     )
+                    yield f"data: {final_response.model_dump_json()}\n\n"
 
-                    # 发送SSE数据
-                    yield f"data: {chunk_response.model_dump_json()}\n\n"
-                    
-                    # 稍微延迟以实现打字机效果
-                    await asyncio.sleep(0.01)
-                
-                # 检查是否是结束信号
-                elif hasattr(chunk, 'response_metadata') and chunk.response_metadata.get('finish_reason') == 'stop':
-                    # 这是结束信号，跳出循环
-                    break
+            except Exception as e:
+                # 如果流处理过程中出现错误，发送错误信息
+                logger.error(f"流式处理过程中出现错误: {str(e)}")
+                error_response = ChunkChatCompletionResponse(
+                    session_id=str(session_id),
+                    chunk=f"处理过程中出现错误: {str(e)}",
+                    status="error",
+                    created_at=time.time(),
+                    model="tongyi",
+                    is_final=True
+                )
+                yield f"data: {error_response.model_dump_json()}\n\n"
+
+            finally:
+                # 确保发送流结束标记
+                yield "data: [DONE]\n\n"
 
     # 返回StreamingResponse，设置正确的SSE headers
     return StreamingResponse(
