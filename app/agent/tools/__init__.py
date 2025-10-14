@@ -30,7 +30,11 @@ class ToolManager:
     def get_tool(self, name: str) -> BaseTool:
         """根据名称获取工具"""
         return self.tools.get(name)
-    
+
+    def get_all_tools(self) -> List[BaseTool]:
+        """获取所有工具的列表，用于绑定到模型"""
+        return list(self.tools.values())
+
     def list_tools(self) -> List[Dict[str, str]]:
         """列出所有工具"""
         return [
