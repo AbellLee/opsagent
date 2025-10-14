@@ -85,7 +85,6 @@ import {
   MESSAGE_TYPES,
   getMessageConfig,
   getToolIcon,
-  hasToolCalls,
   isJsonContent,
   formatJsonContent,
   getToolStatusText
@@ -148,7 +147,7 @@ const hasContentSequence = computed(() => {
 })
 
 // 兼容性：检查是否有工具调用（旧格式）
-const hasToolCallsComputed = computed(() => hasToolCalls(props.message))
+// const hasToolCallsComputed = computed(() => hasToolCalls(props.message))
 
 // 样式计算
 const messageRowStyle = computed(() => ({
@@ -194,17 +193,17 @@ const toggleSequenceItem = (index) => {
 }
 
 // 兼容性：工具调用相关方法（旧格式）
-const toggleToolCall = (index) => {
-  if (props.message?.tool_calls && props.message.tool_calls[index]) {
-    // 确保expanded属性存在，如果不存在则初始化为false
-    const toolCall = props.message.tool_calls[index]
-    if (typeof toolCall.expanded === 'undefined') {
-      toolCall.expanded = false
-    }
-    // 切换展开状态
-    toolCall.expanded = !toolCall.expanded
-  }
-}
+// const toggleToolCall = (index) => {
+//   if (props.message?.tool_calls && props.message.tool_calls[index]) {
+//     // 确保expanded属性存在，如果不存在则初始化为false
+//     const toolCall = props.message.tool_calls[index]
+//     if (typeof toolCall.expanded === 'undefined') {
+//       toolCall.expanded = false
+//     }
+//     // 切换展开状态
+//     toolCall.expanded = !toolCall.expanded
+//   }
+// }
 
 const getToolStatusClass = (status) => {
   switch (status) {
@@ -288,7 +287,7 @@ const highlightCode = async () => {
   sequenceContainers.forEach(container => containers.push(container))
 
   // 对每个容器执行代码高亮
-  containers.forEach(container => {
+  for (const container of containers) {
     if (container && window.Prism) {
       try {
         window.Prism.highlightAllUnder(container)
@@ -302,8 +301,8 @@ const highlightCode = async () => {
       const mermaidElements = container.querySelectorAll('.mermaid')
       if (mermaidElements.length > 0 && window.mermaid) {
         try {
-        // 添加一个小延迟确保DOM完全渲染
-        await new Promise(resolve => setTimeout(resolve, 100))
+          // 添加一个小延迟确保DOM完全渲染
+          await new Promise(resolve => setTimeout(resolve, 100))
 
         // 为每个Mermaid元素生成唯一的ID
         mermaidElements.forEach((element, index) => {
@@ -335,7 +334,7 @@ const highlightCode = async () => {
         }
       }
     }
-  })
+  }
 }
 
 // 在组件挂载后触发代码高亮
