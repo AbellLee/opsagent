@@ -5,7 +5,7 @@ from typing import Dict, Any
 from uuid import UUID
 import time
 from fastapi.responses import StreamingResponse
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import HumanMessage, AIMessage, ToolMessage
 from langgraph.checkpoint.postgres import PostgresSaver
 from langgraph.store.postgres import PostgresStore
 
@@ -31,21 +31,21 @@ async def execute_agent_task(session_id: UUID, message: str, tools=None, config=
         config = create_agent_config(session_id)
         result = agent_graph.invoke(inputs, config, checkpointer=checkpointer)
     
-    # 提取响应消息
+    # 提取响应消息 - 只获取最后的AIMessage
     messages = result.get("messages", [])
-    if messages:
-        last_message = messages[-1]
-        return {
-            "session_id": session_id,
-            "response": last_message.content if hasattr(last_message, 'content') else str(last_message),
-            "status": "success"
-        }
-    else:
-        return {
-            "session_id": session_id,
-            "response": "No response generated",
-            "status": "success"
-        }
+    response_content = "No response generated"
+
+    # 从后往前查找最后一个AIMessage
+    for message in reversed(messages):
+        if isinstance(message, AIMessage) and hasattr(message, 'content') and message.content:
+            response_content = message.content
+            break
+
+    return {
+        "session_id": session_id,
+        "response": response_content,
+        "status": "success"
+    }
 
 
 async def handle_blocking_chat(session_id: UUID, inputs: Dict[str, Any], config: Dict[str, Any]) -> ChatCompletionResponse:
@@ -64,13 +64,15 @@ async def handle_blocking_chat(session_id: UUID, inputs: Dict[str, Any], config:
         # 执行graph
         result = graph.invoke(inputs, config)
 
-        # 提取响应内容
+        # 提取响应内容 - 只获取最后的AIMessage
         messages = result.get("messages", [])
-        if messages:
-            last_message = messages[-1]
-            response_content = last_message.content if hasattr(last_message, 'content') else str(last_message)
-        else:
-            response_content = "抱歉，没有收到回复。"
+        response_content = "抱歉，没有收到回复。"
+
+        # 从后往前查找最后一个AIMessage
+        for message in reversed(messages):
+            if isinstance(message, AIMessage) and hasattr(message, 'content') and message.content:
+                response_content = message.content
+                break
 
         return ChatCompletionResponse(
             session_id=str(session_id),
@@ -100,8 +102,8 @@ async def handle_streaming_chat(session_id: UUID, inputs: Dict[str, Any], config
             try:
                 stream_finished = False
                 for chunk, _ in graph.stream(inputs, config, stream_mode="messages"):
-                    # 检查chunk是否有内容
-                    if hasattr(chunk, 'content') and chunk.content:
+                    # 只处理AIMessage，过滤掉ToolMessage
+                    if isinstance(chunk, AIMessage) and hasattr(chunk, 'content') and chunk.content:
                         # 构造SSE数据
                         chunk_response = ChunkChatCompletionResponse(
                             session_id=str(session_id),
@@ -115,9 +117,8 @@ async def handle_streaming_chat(session_id: UUID, inputs: Dict[str, Any], config
                         # 发送SSE数据
                         yield f"data: {chunk_response.model_dump_json()}\n\n"
 
-
                     # 检查是否是结束信号，但不要break，让图完整执行
-                    elif hasattr(chunk, 'response_metadata') and chunk.response_metadata.get('finish_reason') == 'stop':
+                    elif isinstance(chunk, AIMessage) and hasattr(chunk, 'response_metadata') and chunk.response_metadata.get('finish_reason') == 'stop':
                         # 标记流已结束，但继续让图执行完毕
                         if not stream_finished:
                             stream_finished = True
