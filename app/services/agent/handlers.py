@@ -121,6 +121,14 @@ async def handle_streaming_chat(session_id: UUID, inputs: Dict[str, Any], config
                         tool_calls = getattr(chunk, 'tool_calls', [])
 
                         if tool_calls:
+                            # 调试：打印原始工具调用数据
+                            logger.info(f"原始工具调用数据: {tool_calls}")
+                            for i, tool_call in enumerate(tool_calls):
+                                logger.info(f"工具调用 {i}: {tool_call}")
+                                logger.info(f"工具调用类型: {type(tool_call)}")
+                                if hasattr(tool_call, '__dict__'):
+                                    logger.info(f"工具调用属性: {tool_call.__dict__}")
+
                             # 发送工具调用消息
                             chunk_response = ChunkChatCompletionResponse(
                                 session_id=str(session_id),
@@ -132,7 +140,11 @@ async def handle_streaming_chat(session_id: UUID, inputs: Dict[str, Any], config
                                 message_type="tool_call",
                                 tool_calls=tool_calls
                             )
-                            yield f"data: {chunk_response.model_dump_json()}\n\n"
+
+                            # 调试：打印序列化后的数据
+                            json_data = chunk_response.model_dump_json()
+                            logger.info(f"序列化后的工具调用数据: {json_data}")
+                            yield f"data: {json_data}\n\n"
 
                         elif hasattr(chunk, 'content') and chunk.content:
                             # 发送普通AI回复消息

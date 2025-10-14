@@ -142,6 +142,7 @@ def initialize_llm(llm_type: str = DEFAULT_LLM_TYPE) -> Tuple[ChatOpenAI, OpenAI
                 base_url=base_url,
                 api_key=api_key,
                 model=chat_model,
+                temperature=DEFAULT_TEMPERATURE,
                 timeout=timeout,
                 max_retries=max_retries,
                 streaming=True  # 启用流式支持

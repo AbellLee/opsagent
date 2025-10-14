@@ -285,6 +285,17 @@ const sendStreamingMessage = async (messageContent) => {
 
                     // 处理工具相关消息的合并逻辑
                     if (messageType === 'tool_call') {
+                      // 调试：打印接收到的工具调用数据
+                      console.log('前端接收到工具调用数据:', chunkData)
+                      console.log('工具调用列表:', chunkData.tool_calls)
+                      if (chunkData.tool_calls) {
+                        chunkData.tool_calls.forEach((call, index) => {
+                          console.log(`工具调用 ${index}:`, call)
+                          console.log(`工具名称: ${call.name}`)
+                          console.log(`工具参数:`, call.args)
+                        })
+                      }
+
                       // 创建或更新工具操作消息
                       if (!toolOperationMessage) {
                         toolOperationMessage = createMessage(MESSAGE_TYPES.TOOL_OPERATION, chunkData.chunk || '', {
