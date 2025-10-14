@@ -177,6 +177,60 @@ def list_sessions(user_id: UUID = Query(...), db = Depends(get_db)):
             detail=f"获取会话列表失败: {str(e)}"
         )
 
+
+def format_message_for_frontend(msg):
+    """将LangChain消息格式化为前端需要的格式"""
+    import uuid
+
+    base_message = {
+        "id": getattr(msg, 'id', str(uuid.uuid4())),
+        "timestamp": getattr(msg, 'timestamp', datetime.now().isoformat()) if hasattr(msg, 'timestamp') else datetime.now().isoformat()
+    }
+
+    if hasattr(msg, 'type'):
+        if msg.type == "human":
+            return {
+                **base_message,
+                "type": "user",
+                "role": "user",
+                "content": getattr(msg, 'content', ''),
+                "sender": "用户"
+            }
+        elif msg.type == "ai":
+            # 检查是否包含工具调用
+            tool_calls = getattr(msg, 'tool_calls', [])
+            if tool_calls:
+                return {
+                    **base_message,
+                    "type": "tool_call",
+                    "role": "assistant",
+                    "content": getattr(msg, 'content', ''),
+                    "tool_calls": tool_calls,
+                    "sender": "AI助手"
+                }
+            else:
+                return {
+                    **base_message,
+                    "type": "assistant",
+                    "role": "assistant",
+                    "content": getattr(msg, 'content', ''),
+                    "sender": "AI助手"
+                }
+        elif msg.type == "tool":
+            return {
+                **base_message,
+                "type": "tool_result",
+                "role": "tool",
+                "content": getattr(msg, 'content', ''),
+                "tool_name": getattr(msg, 'name', ''),
+                "tool_call_id": getattr(msg, 'tool_call_id', ''),
+                "sender": f"工具: {getattr(msg, 'name', '未知工具')}"
+            }
+
+    # 过滤掉不支持的消息类型
+    return None
+
+
 @router.get("/{session_id}/messages")
 def get_session_messages(session_id: UUID, db = Depends(get_db)):
     """获取会话历史消息，从LangGraph检查点加载"""
@@ -205,25 +259,16 @@ def get_session_messages(session_id: UUID, db = Depends(get_db)):
             if "channel_values" in checkpoint and "messages" in checkpoint["channel_values"]:
                 messages = checkpoint["channel_values"]["messages"]
             
-            # 转换消息格式
+            logger.info(f"从检查点加载了 {len(messages)} 条消息")
+
+            # 使用新的格式化函数处理消息
             formatted_messages = []
             for msg in messages:
-                # 根据消息类型确定角色
-                role = "unknown"
-                if hasattr(msg, 'type'):
-                    if msg.type == "human":
-                        role = "user"
-                    elif msg.type == "ai":
-                        role = "assistant"
-                    else:
-                        role = msg.type
-                
-                formatted_messages.append({
-                    "role": role,
-                    "content": getattr(msg, 'content', ''),
-                    "timestamp": getattr(msg, 'timestamp', datetime.now().isoformat()) if hasattr(msg, 'timestamp') else datetime.now().isoformat()
-                })
-            
+                logger.info(f"消息内容: {msg}")
+                formatted_msg = format_message_for_frontend(msg)
+                if formatted_msg:  # 只添加支持的消息类型
+                    formatted_messages.append(formatted_msg)
+
             return {"messages": formatted_messages}
             
     except Exception as e:

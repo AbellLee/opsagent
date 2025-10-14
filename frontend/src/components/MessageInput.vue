@@ -77,10 +77,7 @@ import { messageAPI } from '../api'
 import { createDiscreteApi } from 'naive-ui'
 
 // Constants
-const MESSAGE_ROLE = {
-  USER: 'user',
-  ASSISTANT: 'assistant'
-}
+import { MESSAGE_TYPES } from '../constants/messageTypes'
 
 // Emits
 const emit = defineEmits(['send', 'streaming-start', 'streaming-end'])
@@ -122,11 +119,13 @@ const handleKeyDown = (event) => {
 }
 
 // Methods
-const createMessage = (role, content) => ({
+const createMessage = (type, content) => ({
   id: Date.now() + Math.random(), // 生成唯一ID
-  role,
+  type,
+  role: type === MESSAGE_TYPES.USER ? 'user' : 'assistant', // 保持向后兼容
   content,
-  timestamp: new Date().toISOString()
+  timestamp: new Date().toISOString(),
+  sender: type === MESSAGE_TYPES.USER ? '用户' : 'AI助手'
 })
 
 const sendMessage = async () => {
@@ -139,7 +138,7 @@ const sendMessage = async () => {
     sending.value = true
 
     // 创建并添加用户消息
-    const userMessage = createMessage(MESSAGE_ROLE.USER, messageContent)
+    const userMessage = createMessage(MESSAGE_TYPES.USER, messageContent)
     sessionStore.addMessage(userMessage)
 
     // 清空输入框
@@ -177,7 +176,7 @@ const sendBlockingMessage = async (messageContent) => {
   })
 
   // 创建并添加助手消息
-  const assistantMessage = createMessage(MESSAGE_ROLE.ASSISTANT, response.response)
+  const assistantMessage = createMessage(MESSAGE_TYPES.ASSISTANT, response.response)
   sessionStore.addMessage(assistantMessage)
 
   // 通知父组件滚动到底部
@@ -187,7 +186,7 @@ const sendBlockingMessage = async (messageContent) => {
 // 流式模式发送消息
 const sendStreamingMessage = async (messageContent) => {
   // 创建一个空的助手消息用于流式更新
-  const assistantMessage = createMessage(MESSAGE_ROLE.ASSISTANT, '')
+  const assistantMessage = createMessage(MESSAGE_TYPES.ASSISTANT, '')
   const messageIndex = sessionStore.addMessage(assistantMessage)
 
   // 通知开始流式输入

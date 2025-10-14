@@ -1,30 +1,68 @@
 <template>
-  <div class="message-row" :style="messageStyle">
+  <div class="message-row" :style="messageRowStyle">
     <div class="message-bubble" :style="bubbleStyle">
-      <!-- 消息头部（非用户消息显示） -->
-      <div
-        class="message-header"
-        v-if="message.role !== 'user'"
-        style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;"
-      >
-        <div style="font-weight: bold; font-size: 12px;" :style="{ color: headerColor }">
-          {{ senderName }}
+      <!-- 消息头部 -->
+      <div v-if="showHeader" class="message-header">
+        <div class="sender-info">
+          <span class="sender-icon">{{ messageConfig.icon }}</span>
+          <span class="sender-name" :style="{ color: headerColor }">
+            {{ senderName }}
+          </span>
+          <span v-if="isToolMessage" class="tool-badge">
+            {{ getToolDisplayName() }}
+          </span>
         </div>
-        <n-button text size="tiny" @click="copyToClipboard">
-          <n-icon>
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M7 4V2C7 1.45 7.45 1 8 1H20C20.55 1 21 1.45 21 2V16C21 16.55 20.55 17 20 17H18V19C18 20.1 17.1 21 16 21H4C2.9 21 2 20.1 2 19V7C2 5.9 2.9 5 4 5H6V4H7ZM4 7V19H16V17H14C12.9 17 12 16.1 12 15V7C12 5.9 12.9 5 14 5H16V3H8V5H10C11.1 5 12 5.9 12 7V15C12 16.1 11.1 17 10 17H4V7ZM6 5V4H4V5H6Z"/>
-            </svg>
-          </n-icon>
-        </n-button>
+        <div class="message-actions">
+          <n-button text size="tiny" @click="copyToClipboard">
+            <n-icon>
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M7 4V2C7 1.45 7.45 1 8 1H20C20.55 1 21 1.45 21 2V16C21 16.55 20.55 17 20 17H18V19C18 20.1 17.1 21 16 21H4C2.9 21 2 20.1 2 19V7C2 5.9 2.9 5 4 5H6V4H7ZM4 7V19H16V17H14C12.9 17 12 16.1 12 15V7C12 5.9 12.9 5 14 5H16V3H8V5H10C11.1 5 12 5.9 12 7V15C12 16.1 11.1 17 10 17H4V7ZM6 5V4H4V5H6Z"/>
+              </svg>
+            </n-icon>
+          </n-button>
+          <n-button v-if="canRetry" text size="tiny" @click="retryMessage">
+            <n-icon>
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M17.65,6.35C16.2,4.9 14.21,4 12,4A8,8 0 0,0 4,12A8,8 0 0,0 12,20C15.73,20 18.84,17.45 19.73,14H17.65C16.83,16.33 14.61,18 12,18A6,6 0 0,1 6,12A6,6 0 0,1 12,6C13.66,6 15.14,6.69 16.22,7.78L13,11H20V4L17.65,6.35Z"/>
+              </svg>
+            </n-icon>
+          </n-button>
+        </div>
       </div>
 
-      <!-- 消息内容 -->
-      <div
-        ref="contentRef"
-        class="message-content"
-        v-html="formattedContent"
-      ></div>
+      <!-- 工具调用展示 -->
+      <div v-if="isToolCallMessage" class="tool-call-content">
+        <div class="tool-call-header">
+          <span class="tool-call-title">🔧 调用工具</span>
+          <n-button text size="tiny" @click="toggleToolDetails">
+            {{ showToolDetails ? '收起' : '展开' }}
+          </n-button>
+        </div>
+        <div v-if="showToolDetails" class="tool-call-details">
+          <div v-for="(call, index) in message.tool_calls" :key="index" class="tool-call-item">
+            <div class="tool-name">{{ call.name }}</div>
+            <div class="tool-args">
+              <pre>{{ JSON.stringify(call.args, null, 2) }}</pre>
+            </div>
+          </div>
+        </div>
+        <!-- 如果有内容，也显示 -->
+        <div v-if="message.content" class="tool-call-message" v-html="formattedContent"></div>
+      </div>
+
+      <!-- 工具结果展示 -->
+      <div v-else-if="isToolResultMessage" class="tool-result-content">
+        <div class="tool-result-header">
+          <span class="tool-result-title">📊 {{ message.tool_name }} 执行结果</span>
+        </div>
+        <div class="tool-result-body">
+          <pre v-if="isJsonContent">{{ formattedJsonContent }}</pre>
+          <div v-else v-html="formattedContent"></div>
+        </div>
+      </div>
+
+      <!-- 普通消息内容 -->
+      <div v-else ref="contentRef" class="message-content" v-html="formattedContent"></div>
 
       <!-- 流式输入指示器 -->
       <div v-if="isStreaming" class="streaming-indicator">
@@ -42,20 +80,33 @@
 import { computed, onMounted, ref, watch, nextTick } from 'vue'
 import { NButton, NIcon } from 'naive-ui'
 import { parseMarkdown } from '../utils/markdown'
+import {
+  MESSAGE_TYPES,
+  getMessageConfig,
+  getToolIcon,
+  isToolMessage as checkIsToolMessage,
+  isJsonContent as checkIsJsonContent,
+  formatJsonContent
+} from '../constants/messageTypes'
 
 const props = defineProps({
   message: {
     type: Object,
     required: true,
     default: () => ({
+      type: 'assistant',
       role: 'assistant',
       content: '',
-      timestamp: ''
+      timestamp: '',
+      sender: 'AI助手'
     }),
     validator: (value) => {
       if (!value || typeof value !== 'object') return false
-      if (!value.role || typeof value.role !== 'string') return false
-      return ['user', 'assistant', 'system'].includes(value.role)
+      // 兼容旧的 role 字段和新的 type 字段
+      const messageType = value.type || value.role
+      if (!messageType || typeof messageType !== 'string') return false
+      return Object.values(MESSAGE_TYPES).includes(messageType) ||
+             ['user', 'assistant', 'system', 'tool'].includes(messageType)
     }
   },
   isStreaming: {
@@ -64,69 +115,76 @@ const props = defineProps({
   }
 })
 
-// 计算消息样式
-const messageStyle = computed(() => {
-  return {
-    justifyContent: props.message.role === 'user' ? 'flex-end' :
-                   props.message.role === 'system' ? 'center' : 'flex-start'
+// 响应式数据
+const showToolDetails = ref(false)
+const contentRef = ref(null)
+
+// 计算属性
+const messageType = computed(() => {
+  // 优先使用新的 type 字段，如果没有则根据 role 映射
+  if (props.message.type) {
+    return props.message.type
+  }
+
+  // 兼容旧的 role 字段
+  switch (props.message.role) {
+    case 'user': return MESSAGE_TYPES.USER
+    case 'assistant': return MESSAGE_TYPES.ASSISTANT
+    case 'tool': return MESSAGE_TYPES.TOOL_RESULT
+    case 'system': return MESSAGE_TYPES.ASSISTANT // 系统消息当作助手消息处理
+    default: return MESSAGE_TYPES.ASSISTANT
   }
 })
+const messageConfig = computed(() => getMessageConfig(messageType.value))
+const showHeader = computed(() => messageConfig.value.showHeader)
+const isToolCallMessage = computed(() => messageType.value === MESSAGE_TYPES.TOOL_CALL)
+const isToolResultMessage = computed(() => messageType.value === MESSAGE_TYPES.TOOL_RESULT)
+const isToolMessage = computed(() => checkIsToolMessage(messageType.value))
 
-// 计算消息气泡样式
-const bubbleStyle = computed(() => {
-  const baseStyle = {
-    borderRadius: '12px',
-    padding: '12px 16px',
-    maxWidth: '80%',
-    wordWrap: 'break-word',
-    position: 'relative',
-    boxShadow: '0 1px 2px rgba(0,0,0,0.1)'
-  }
-
-  if (props.message.role === 'user') {
-    return {
-      ...baseStyle,
-      backgroundColor: '#409eff',
-      color: '#fff',
-      marginLeft: 'auto',
-      marginRight: '0'
-    }
-  } else if (props.message.role === 'assistant') {
-    return {
-      ...baseStyle,
-      backgroundColor: '#f0f5ff',
-      color: '#333',
-      marginRight: 'auto',
-      marginLeft: '0'
-    }
-  } else {
-    return {
-      ...baseStyle,
-      backgroundColor: '#fff7e6',
-      color: '#333',
-      margin: '0 auto',
-      maxWidth: '90%'
-    }
-  }
-})
-
-// 计算发送者名称
 const senderName = computed(() => {
-  switch (props.message.role) {
-    case 'user': return '你'
-    case 'assistant': return 'AI助手'
-    case 'system': return '系统消息'
-    default: return '未知'
-  }
+  return props.message.sender || messageConfig.value.defaultSender || '未知'
 })
 
-// 计算头部颜色
+const canRetry = computed(() => {
+  return isToolResultMessage.value && props.message.content.includes('error')
+})
+
+// 样式计算
+const messageRowStyle = computed(() => ({
+  justifyContent: messageConfig.value.align === 'right' ? 'flex-end' : 'flex-start'
+}))
+
+const bubbleStyle = computed(() => ({
+  backgroundColor: messageConfig.value.bgColor,
+  color: messageConfig.value.textColor,
+  borderRadius: '12px',
+  padding: '12px 16px',
+  maxWidth: '80%',
+  wordWrap: 'break-word',
+  position: 'relative',
+  boxShadow: '0 1px 2px rgba(0,0,0,0.1)',
+  marginLeft: messageConfig.value.align === 'right' ? 'auto' : '0',
+  marginRight: messageConfig.value.align === 'right' ? '0' : 'auto'
+}))
+
 const headerColor = computed(() => {
-  switch (props.message.role) {
-    case 'assistant': return '#409eff'
-    case 'system': return '#e6a23c'
+  switch (messageType.value) {
+    case MESSAGE_TYPES.ASSISTANT: return '#409eff'
+    case MESSAGE_TYPES.TOOL_CALL: return '#fa8c16'
+    case MESSAGE_TYPES.TOOL_RESULT: return '#52c41a'
     default: return '#409eff'
   }
+})
+
+// 内容处理
+const isJsonContent = computed(() => {
+  if (!isToolResultMessage.value) return false
+  return checkIsJsonContent(props.message.content)
+})
+
+const formattedJsonContent = computed(() => {
+  if (!isJsonContent.value) return ''
+  return formatJsonContent(props.message.content)
 })
 
 // 流式显示内容
@@ -139,6 +197,54 @@ const formattedContent = computed(() => {
   if (!content) return ''
   return parseMarkdown(content)
 })
+
+// 方法
+const getToolDisplayName = () => {
+  if (isToolCallMessage.value && props.message.tool_calls?.length > 0) {
+    return props.message.tool_calls[0].name
+  }
+  if (isToolResultMessage.value && props.message.tool_name) {
+    return props.message.tool_name
+  }
+  return ''
+}
+
+const toggleToolDetails = () => {
+  showToolDetails.value = !showToolDetails.value
+}
+
+const copyToClipboard = async () => {
+  try {
+    let textToCopy = props.message.content
+
+    // 如果是工具调用，复制工具调用信息
+    if (isToolCallMessage.value && props.message.tool_calls) {
+      textToCopy = JSON.stringify(props.message.tool_calls, null, 2)
+    }
+    // 如果是工具结果且是JSON，复制格式化的JSON
+    else if (isToolResultMessage.value && isJsonContent.value) {
+      textToCopy = formattedJsonContent.value
+    }
+
+    await navigator.clipboard.writeText(textToCopy)
+
+    // 使用 Naive UI 的消息提示
+    const { message } = await import('naive-ui')
+    message.success('已复制到剪贴板')
+  } catch (error) {
+    console.error('复制失败:', error)
+    const { message } = await import('naive-ui')
+    message.error('复制失败')
+  }
+}
+
+const retryMessage = () => {
+  // 重试逻辑 - 通过事件向父组件发送重试请求
+  emit('retry-message', props.message)
+}
+
+// 定义事件
+const emit = defineEmits(['retry-message'])
 
 // 打字机效果
 const typewriterEffect = (targetText) => {
@@ -168,9 +274,6 @@ const typewriterEffect = (targetText) => {
 
   animate()
 }
-
-// 用于触发代码高亮的引用
-const contentRef = ref(null)
 
 // 高亮代码的函数
 const highlightCode = async () => {
@@ -222,18 +325,6 @@ const highlightCode = async () => {
   }
 }
 
-
-
-// 复制消息内容到剪贴板
-const copyToClipboard = async () => {
-  try {
-    await navigator.clipboard.writeText(props.message.content)
-    // 可以添加一个提示，比如notification
-  } catch (err) {
-    console.error('复制失败:', err)
-  }
-}
-
 // 在组件挂载后触发代码高亮
 onMounted(() => {
   highlightCode()
@@ -279,6 +370,127 @@ onMounted(() => {
   animation: fadeIn 0.3s ease-out;
 }
 
+/* 消息头部样式 */
+.message-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  font-size: 12px;
+}
+
+.sender-info {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sender-icon {
+  font-size: 14px;
+}
+
+.sender-name {
+  font-weight: bold;
+}
+
+.tool-badge {
+  background: rgba(0,0,0,0.1);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  color: #666;
+}
+
+.message-actions {
+  display: flex;
+  gap: 4px;
+}
+
+/* 工具调用样式 */
+.tool-call-content {
+  border-left: 3px solid #fa8c16;
+  padding-left: 12px;
+}
+
+.tool-call-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  font-weight: bold;
+  color: #fa8c16;
+}
+
+.tool-call-details {
+  background: rgba(250, 140, 22, 0.05);
+  border-radius: 6px;
+  padding: 8px;
+  margin-bottom: 8px;
+}
+
+.tool-call-item {
+  margin-bottom: 8px;
+}
+
+.tool-call-item:last-child {
+  margin-bottom: 0;
+}
+
+.tool-name {
+  font-weight: bold;
+  color: #fa8c16;
+  margin-bottom: 4px;
+  font-size: 13px;
+}
+
+.tool-args {
+  font-family: 'Courier New', monospace;
+  font-size: 12px;
+  background: rgba(0,0,0,0.05);
+  padding: 6px;
+  border-radius: 4px;
+  overflow-x: auto;
+}
+
+.tool-args pre {
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.tool-call-message {
+  margin-top: 8px;
+}
+
+/* 工具结果样式 */
+.tool-result-content {
+  border-left: 3px solid #52c41a;
+  padding-left: 12px;
+}
+
+.tool-result-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  font-weight: bold;
+  color: #52c41a;
+}
+
+.tool-result-body {
+  background: rgba(82, 196, 26, 0.05);
+  border-radius: 6px;
+  padding: 8px;
+}
+
+.tool-result-body pre {
+  margin: 0;
+  font-family: 'Courier New', monospace;
+  font-size: 12px;
+  white-space: pre-wrap;
+  overflow-x: auto;
+}
+
+/* 动画效果 */
 @keyframes fadeIn {
   from {
     opacity: 0;
@@ -287,6 +499,51 @@ onMounted(() => {
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateX(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* 工具消息特殊动画 */
+.tool-call-content,
+.tool-result-content {
+  animation: slideIn 0.4s ease-out;
+}
+
+/* 悬停效果 */
+.message-bubble:hover {
+  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+  transition: box-shadow 0.2s ease;
+}
+
+/* 工具调用详情展开动画 */
+.tool-call-details {
+  animation: fadeIn 0.3s ease-out;
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .message-bubble {
+    max-width: 90%;
+    padding: 10px 12px;
+  }
+
+  .message-header {
+    font-size: 11px;
+  }
+
+  .tool-args,
+  .tool-result-body pre {
+    font-size: 11px;
   }
 }
 
