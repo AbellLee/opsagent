@@ -150,6 +150,7 @@ const selectSession = async (session) => {
   // 加载会话的详细内容（消息）
   try {
     const response = await sessionAPI.getMessages(session.session_id)
+    console.log('加载的历史消息:', response.messages)
     sessionStore.setMessages(response.messages || [])
   } catch (error) {
     console.error('加载会话消息失败:', error)

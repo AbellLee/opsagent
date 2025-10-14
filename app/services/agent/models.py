@@ -31,6 +31,7 @@ class ChatCompletionResponse(BaseModel):
     created_at: float
     model: str
     usage: Optional[Dict[str, Any]] = None
+    messages: Optional[List[Dict[str, Any]]] = None  # 新增：结构化消息数据
 
 
 class ChunkChatCompletionResponse(BaseModel):
@@ -41,3 +42,7 @@ class ChunkChatCompletionResponse(BaseModel):
     created_at: float
     model: str
     is_final: bool = False
+    message_type: Optional[str] = "assistant"  # 消息类型：assistant, tool_call, tool_result
+    tool_calls: Optional[List[Dict[str, Any]]] = None  # 工具调用信息
+    tool_name: Optional[str] = None  # 工具名称（用于tool_result类型）
+    tool_call_id: Optional[str] = None  # 工具调用ID（用于tool_result类型）

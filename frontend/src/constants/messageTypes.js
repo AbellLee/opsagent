@@ -3,9 +3,10 @@
  */
 export const MESSAGE_TYPES = {
   USER: 'user',
-  ASSISTANT: 'assistant', 
+  ASSISTANT: 'assistant',
   TOOL_CALL: 'tool_call',
-  TOOL_RESULT: 'tool_result'
+  TOOL_RESULT: 'tool_result',
+  TOOL_OPERATION: 'tool_operation'  // 新增：工具操作（包含调用和结果）
 }
 
 /**
@@ -39,10 +40,18 @@ export const MESSAGE_CONFIG = {
   [MESSAGE_TYPES.TOOL_RESULT]: {
     align: 'left',
     bgColor: '#f6ffed',
-    textColor: '#333', 
+    textColor: '#333',
     showHeader: true,
     icon: '📊',
     defaultSender: '工具执行结果'
+  },
+  [MESSAGE_TYPES.TOOL_OPERATION]: {
+    align: 'left',
+    bgColor: '#f0f5ff',
+    textColor: '#333',
+    showHeader: true,
+    icon: '🔧',
+    defaultSender: 'AI助手'
   }
 }
 
@@ -90,7 +99,9 @@ export function getMessageConfig(messageType) {
  * @returns {boolean} 是否为工具消息
  */
 export function isToolMessage(messageType) {
-  return messageType === MESSAGE_TYPES.TOOL_CALL || messageType === MESSAGE_TYPES.TOOL_RESULT
+  return messageType === MESSAGE_TYPES.TOOL_CALL ||
+         messageType === MESSAGE_TYPES.TOOL_RESULT ||
+         messageType === MESSAGE_TYPES.TOOL_OPERATION
 }
 
 /**

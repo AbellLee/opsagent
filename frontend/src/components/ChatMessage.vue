@@ -30,8 +30,62 @@
         </div>
       </div>
 
-      <!-- 工具调用展示 -->
-      <div v-if="isToolCallMessage" class="tool-call-content">
+      <!-- 工具操作展示（合并的工具调用和结果） -->
+      <div v-if="isToolOperationMessage" class="tool-operation-content">
+        <!-- 第一行：标题和展开按钮 -->
+        <div class="tool-operation-header">
+          <span class="tool-operation-title">🔧 工具操作</span>
+          <n-button text size="tiny" @click="toggleToolOperationDetails">
+            {{ showToolOperationDetails ? '收起' : '展开' }}
+          </n-button>
+        </div>
+
+        <!-- 第二行：简洁的工具信息 -->
+        <div v-if="!showToolOperationDetails" class="tool-operation-summary">
+          <span v-if="message.tool_calls && message.tool_calls.length > 0" class="tool-summary-item">
+            调用了 {{ message.tool_calls.length }} 个工具
+          </span>
+          <span v-if="message.tool_results && message.tool_results.length > 0" class="tool-summary-item">
+            {{ message.tool_results.length }} 个工具执行完成
+          </span>
+        </div>
+
+        <!-- 展开的详细信息 -->
+        <div v-if="showToolOperationDetails" class="tool-operation-details">
+          <!-- 工具调用部分 -->
+          <div v-if="message.tool_calls && message.tool_calls.length > 0" class="tool-calls-section">
+            <div class="section-title">调用工具</div>
+            <div class="tool-call-details">
+              <div v-for="(call, index) in message.tool_calls" :key="index" class="tool-call-item">
+                <div class="tool-name">{{ call.name }}</div>
+                <div class="tool-args">
+                  <pre>{{ JSON.stringify(call.args, null, 2) }}</pre>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 工具结果部分 -->
+          <div v-if="message.tool_results && message.tool_results.length > 0" class="tool-results-section">
+            <div class="section-title">执行结果</div>
+            <div class="tool-results-details">
+              <div v-for="(result, index) in message.tool_results" :key="index" class="tool-result-item">
+                <div class="tool-result-name">{{ result.tool_name }}</div>
+                <div class="tool-result-content">
+                  <pre v-if="checkIsJsonContent(result.content)">{{ formatJsonContent(result.content) }}</pre>
+                  <div v-else v-html="parseMarkdown(result.content)"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- AI回复内容 -->
+        <div v-if="message.content" class="tool-operation-message" v-html="formattedContent"></div>
+      </div>
+
+      <!-- 工具调用展示（独立显示，保持兼容性） -->
+      <div v-else-if="isToolCallMessage" class="tool-call-content">
         <div class="tool-call-header">
           <span class="tool-call-title">🔧 调用工具</span>
           <n-button text size="tiny" @click="toggleToolDetails">
@@ -50,14 +104,26 @@
         <div v-if="message.content" class="tool-call-message" v-html="formattedContent"></div>
       </div>
 
-      <!-- 工具结果展示 -->
+      <!-- 工具结果展示（独立显示，保持兼容性） -->
       <div v-else-if="isToolResultMessage" class="tool-result-content">
         <div class="tool-result-header">
           <span class="tool-result-title">📊 {{ message.tool_name }} 执行结果</span>
+          <n-button text size="tiny" @click="toggleToolResultDetails">
+            {{ showToolResultDetails ? '收起' : '展开' }}
+          </n-button>
         </div>
-        <div class="tool-result-body">
-          <pre v-if="isJsonContent">{{ formattedJsonContent }}</pre>
-          <div v-else v-html="formattedContent"></div>
+        <div
+          v-if="showToolResultDetails"
+          class="tool-result-body"
+          :class="{ 'tool-result-expanded': showToolResultDetails }"
+        >
+          <pre v-if="isJsonContent" class="tool-result-content-pre">{{ formattedJsonContent }}</pre>
+          <div v-else class="tool-result-content-div" v-html="formattedContent"></div>
+        </div>
+        <div v-else class="tool-result-preview">
+          <span class="tool-result-preview-text">
+            {{ getToolResultPreview() }}
+          </span>
         </div>
       </div>
 
@@ -117,6 +183,8 @@ const props = defineProps({
 
 // 响应式数据
 const showToolDetails = ref(false)
+const showToolResultDetails = ref(false)
+const showToolOperationDetails = ref(false)
 const contentRef = ref(null)
 
 // 计算属性
@@ -139,6 +207,7 @@ const messageConfig = computed(() => getMessageConfig(messageType.value))
 const showHeader = computed(() => messageConfig.value.showHeader)
 const isToolCallMessage = computed(() => messageType.value === MESSAGE_TYPES.TOOL_CALL)
 const isToolResultMessage = computed(() => messageType.value === MESSAGE_TYPES.TOOL_RESULT)
+const isToolOperationMessage = computed(() => messageType.value === MESSAGE_TYPES.TOOL_OPERATION)
 const isToolMessage = computed(() => checkIsToolMessage(messageType.value))
 
 const senderName = computed(() => {
@@ -211,6 +280,41 @@ const getToolDisplayName = () => {
 
 const toggleToolDetails = () => {
   showToolDetails.value = !showToolDetails.value
+}
+
+const toggleToolResultDetails = () => {
+  showToolResultDetails.value = !showToolResultDetails.value
+}
+
+const toggleToolOperationDetails = () => {
+  showToolOperationDetails.value = !showToolOperationDetails.value
+}
+
+const getToolResultPreview = () => {
+  const content = props.message.content || ''
+
+  // 如果是JSON内容，显示简化的预览
+  if (isJsonContent.value) {
+    try {
+      const parsed = JSON.parse(content)
+      if (typeof parsed === 'object') {
+        const keys = Object.keys(parsed)
+        if (keys.length > 0) {
+          return `{ ${keys.slice(0, 3).join(', ')}${keys.length > 3 ? '...' : ''} }`
+        }
+      }
+      return 'JSON 数据'
+    } catch {
+      return '数据格式错误'
+    }
+  }
+
+  // 对于普通文本，显示前100个字符
+  if (content.length > 100) {
+    return content.substring(0, 100) + '...'
+  }
+
+  return content || '无内容'
 }
 
 const copyToClipboard = async () => {
@@ -426,6 +530,9 @@ onMounted(() => {
   border-radius: 6px;
   padding: 8px;
   margin-bottom: 8px;
+  animation: slideDown 0.3s ease-out;
+  max-height: 300px;
+  overflow-y: auto;
 }
 
 .tool-call-item {
@@ -461,6 +568,107 @@ onMounted(() => {
   margin-top: 8px;
 }
 
+/* 工具操作样式（合并的工具调用和结果） */
+.tool-operation-content {
+  border-left: 3px solid #409eff;
+  padding-left: 12px;
+  background: rgba(64, 158, 255, 0.02);
+  border-radius: 8px;
+  padding: 12px;
+  margin: 4px 0;
+}
+
+.tool-operation-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  font-weight: bold;
+  color: #409eff;
+}
+
+.tool-operation-summary {
+  display: flex;
+  gap: 12px;
+  font-size: 12px;
+  color: #666;
+  margin-bottom: 8px;
+}
+
+.tool-summary-item {
+  padding: 2px 8px;
+  background: rgba(64, 158, 255, 0.1);
+  border-radius: 4px;
+  border: 1px dashed rgba(64, 158, 255, 0.3);
+}
+
+.tool-operation-details {
+  border-top: 1px solid rgba(64, 158, 255, 0.2);
+  padding-top: 8px;
+  margin-top: 8px;
+}
+
+.tool-calls-section,
+.tool-results-section {
+  margin-bottom: 12px;
+}
+
+.section-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #666;
+  margin-bottom: 6px;
+  padding: 4px 8px;
+  background: rgba(0, 0, 0, 0.05);
+  border-radius: 4px;
+  display: inline-block;
+}
+
+.tool-calls-preview,
+.tool-results-preview {
+  font-size: 12px;
+  color: #888;
+  font-style: italic;
+  padding: 6px 8px;
+  background: rgba(250, 140, 22, 0.1);
+  border-radius: 4px;
+  border: 1px dashed #fa8c16;
+}
+
+.tool-result-item {
+  margin-bottom: 8px;
+  padding: 8px;
+  background: rgba(82, 196, 26, 0.05);
+  border-radius: 6px;
+  border-left: 3px solid #52c41a;
+}
+
+.tool-result-name {
+  font-weight: bold;
+  color: #52c41a;
+  margin-bottom: 4px;
+  font-size: 12px;
+}
+
+.tool-result-content {
+  font-size: 12px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.tool-result-content pre {
+  margin: 0;
+  font-family: 'Courier New', monospace;
+  white-space: pre-wrap;
+  overflow-x: auto;
+}
+
+.tool-operation-message {
+  margin-top: 12px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(250, 140, 22, 0.2);
+}
+
 /* 工具结果样式 */
 .tool-result-content {
   border-left: 3px solid #52c41a;
@@ -476,18 +684,90 @@ onMounted(() => {
   color: #52c41a;
 }
 
+.tool-result-preview {
+  background: rgba(82, 196, 26, 0.05);
+  border-radius: 6px;
+  padding: 8px;
+  font-size: 12px;
+  color: #666;
+  font-style: italic;
+  border: 1px dashed #52c41a;
+}
+
+.tool-result-preview-text {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .tool-result-body {
   background: rgba(82, 196, 26, 0.05);
   border-radius: 6px;
   padding: 8px;
+  animation: slideDown 0.3s ease-out;
+  overflow: hidden;
 }
 
-.tool-result-body pre {
+.tool-result-expanded {
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.tool-result-content-pre {
   margin: 0;
   font-family: 'Courier New', monospace;
   font-size: 12px;
   white-space: pre-wrap;
   overflow-x: auto;
+  max-height: 350px;
+  overflow-y: auto;
+}
+
+.tool-result-content-div {
+  max-height: 350px;
+  overflow-y: auto;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+/* 滚动条样式 */
+.tool-result-content-pre::-webkit-scrollbar,
+.tool-result-content-div::-webkit-scrollbar,
+.tool-result-expanded::-webkit-scrollbar,
+.tool-call-details::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.tool-result-content-pre::-webkit-scrollbar-track,
+.tool-result-content-div::-webkit-scrollbar-track,
+.tool-result-expanded::-webkit-scrollbar-track,
+.tool-call-details::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.1);
+  border-radius: 3px;
+}
+
+.tool-result-content-pre::-webkit-scrollbar-thumb,
+.tool-result-content-div::-webkit-scrollbar-thumb,
+.tool-result-expanded::-webkit-scrollbar-thumb {
+  background: rgba(82, 196, 26, 0.5);
+  border-radius: 3px;
+}
+
+.tool-call-details::-webkit-scrollbar-thumb {
+  background: rgba(250, 140, 22, 0.5);
+  border-radius: 3px;
+}
+
+.tool-result-content-pre::-webkit-scrollbar-thumb:hover,
+.tool-result-content-div::-webkit-scrollbar-thumb:hover,
+.tool-result-expanded::-webkit-scrollbar-thumb:hover {
+  background: rgba(82, 196, 26, 0.7);
+}
+
+.tool-call-details::-webkit-scrollbar-thumb:hover {
+  background: rgba(250, 140, 22, 0.7);
 }
 
 /* 动画效果 */
@@ -510,6 +790,19 @@ onMounted(() => {
   to {
     opacity: 1;
     transform: translateX(0);
+  }
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    max-height: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    max-height: 400px;
+    transform: translateY(0);
   }
 }
 

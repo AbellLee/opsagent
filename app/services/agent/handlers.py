@@ -64,14 +64,25 @@ async def handle_blocking_chat(session_id: UUID, inputs: Dict[str, Any], config:
         # 执行graph
         result = graph.invoke(inputs, config)
 
-        # 提取响应内容 - 只获取最后的AIMessage
+        # 获取执行过程中的所有新消息
         messages = result.get("messages", [])
+
+        # 导入消息合并函数
+        from app.api.routes.sessions import merge_tool_messages
+
+        # 合并工具相关消息
+        merged_messages = merge_tool_messages(messages)
+
+        # 提取最后的回复内容（用于兼容性）
         response_content = "抱歉，没有收到回复。"
 
-        # 从后往前查找最后一个AIMessage
-        for message in reversed(messages):
-            if isinstance(message, AIMessage) and hasattr(message, 'content') and message.content:
-                response_content = message.content
+        # 从合并后的消息中获取最后的回复
+        for message in reversed(merged_messages):
+            if message.get("type") == "assistant" and message.get("content"):
+                response_content = message.get("content")
+                break
+            elif message.get("type") == "tool_operation" and message.get("content"):
+                response_content = message.get("content")
                 break
 
         return ChatCompletionResponse(
@@ -79,7 +90,8 @@ async def handle_blocking_chat(session_id: UUID, inputs: Dict[str, Any], config:
             response=response_content,
             status="success",
             created_at=time.time(),
-            model="tongyi"
+            model="tongyi",
+            messages=merged_messages  # 返回结构化的消息数据
         )
 
 
@@ -97,40 +109,74 @@ async def handle_streaming_chat(session_id: UUID, inputs: Dict[str, Any], config
             # 创建graph实例
             graph = create_graph(checkpointer=checkpointer, store=store)
             
-            # 使用异步方式处理graph.stream，直接转发LLM产生的chunk
+            # 使用异步方式处理graph.stream，按实际顺序传输各种类型的消息
             # 重要：不要中途break，让LangGraph完整执行以确保状态正确保存
             try:
                 stream_finished = False
                 for chunk, _ in graph.stream(inputs, config, stream_mode="messages"):
-                    # 只处理AIMessage，过滤掉ToolMessage
-                    if isinstance(chunk, AIMessage) and hasattr(chunk, 'content') and chunk.content:
-                        # 构造SSE数据
+
+                    # 处理AIMessage - 包括普通回复和工具调用
+                    if isinstance(chunk, AIMessage):
+                        # 检查是否包含工具调用
+                        tool_calls = getattr(chunk, 'tool_calls', [])
+
+                        if tool_calls:
+                            # 发送工具调用消息
+                            chunk_response = ChunkChatCompletionResponse(
+                                session_id=str(session_id),
+                                chunk=getattr(chunk, 'content', ''),
+                                status="streaming",
+                                created_at=time.time(),
+                                model="tongyi",
+                                is_final=False,
+                                message_type="tool_call",
+                                tool_calls=tool_calls
+                            )
+                            yield f"data: {chunk_response.model_dump_json()}\n\n"
+
+                        elif hasattr(chunk, 'content') and chunk.content:
+                            # 发送普通AI回复消息
+                            chunk_response = ChunkChatCompletionResponse(
+                                session_id=str(session_id),
+                                chunk=chunk.content,
+                                status="streaming",
+                                created_at=time.time(),
+                                model="tongyi",
+                                is_final=False,
+                                message_type="assistant"
+                            )
+                            yield f"data: {chunk_response.model_dump_json()}\n\n"
+
+                        # 检查是否是结束信号，但不要break，让图完整执行
+                        if hasattr(chunk, 'response_metadata') and chunk.response_metadata.get('finish_reason') == 'stop':
+                            # 标记流已结束，但继续让图执行完毕
+                            if not stream_finished:
+                                stream_finished = True
+                                final_response = ChunkChatCompletionResponse(
+                                    session_id=str(session_id),
+                                    chunk="",
+                                    status="completed",
+                                    created_at=time.time(),
+                                    model="tongyi",
+                                    is_final=True,
+                                    message_type="assistant"
+                                )
+                                yield f"data: {final_response.model_dump_json()}\n\n"
+
+                    # 处理ToolMessage - 工具执行结果
+                    elif isinstance(chunk, ToolMessage):
                         chunk_response = ChunkChatCompletionResponse(
                             session_id=str(session_id),
-                            chunk=chunk.content,
+                            chunk=getattr(chunk, 'content', ''),
                             status="streaming",
                             created_at=time.time(),
                             model="tongyi",
-                            is_final=False
+                            is_final=False,
+                            message_type="tool_result",
+                            tool_name=getattr(chunk, 'name', ''),
+                            tool_call_id=getattr(chunk, 'tool_call_id', '')
                         )
-
-                        # 发送SSE数据
                         yield f"data: {chunk_response.model_dump_json()}\n\n"
-
-                    # 检查是否是结束信号，但不要break，让图完整执行
-                    elif isinstance(chunk, AIMessage) and hasattr(chunk, 'response_metadata') and chunk.response_metadata.get('finish_reason') == 'stop':
-                        # 标记流已结束，但继续让图执行完毕
-                        if not stream_finished:
-                            stream_finished = True
-                            final_response = ChunkChatCompletionResponse(
-                                session_id=str(session_id),
-                                chunk="",
-                                status="completed",
-                                created_at=time.time(),
-                                model="tongyi",
-                                is_final=True
-                            )
-                            yield f"data: {final_response.model_dump_json()}\n\n"
 
                 # 图执行完毕后，如果还没有发送结束信号，则发送
                 if not stream_finished:
@@ -140,7 +186,8 @@ async def handle_streaming_chat(session_id: UUID, inputs: Dict[str, Any], config
                         status="completed",
                         created_at=time.time(),
                         model="tongyi",
-                        is_final=True
+                        is_final=True,
+                        message_type="assistant"
                     )
                     yield f"data: {final_response.model_dump_json()}\n\n"
 
@@ -153,7 +200,8 @@ async def handle_streaming_chat(session_id: UUID, inputs: Dict[str, Any], config
                     status="error",
                     created_at=time.time(),
                     model="tongyi",
-                    is_final=True
+                    is_final=True,
+                    message_type="assistant"
                 )
                 yield f"data: {error_response.model_dump_json()}\n\n"
 

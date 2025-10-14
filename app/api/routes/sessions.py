@@ -181,11 +181,14 @@ def list_sessions(user_id: UUID = Query(...), db = Depends(get_db)):
 def format_message_for_frontend(msg):
     """将LangChain消息格式化为前端需要的格式"""
     import uuid
+    from app.core.logger import logger
 
     base_message = {
         "id": getattr(msg, 'id', str(uuid.uuid4())),
         "timestamp": getattr(msg, 'timestamp', datetime.now().isoformat()) if hasattr(msg, 'timestamp') else datetime.now().isoformat()
     }
+
+    logger.debug(f"格式化消息: type={getattr(msg, 'type', 'unknown')}, content={getattr(msg, 'content', '')[:50]}...")
 
     if hasattr(msg, 'type'):
         if msg.type == "human":
@@ -231,6 +234,88 @@ def format_message_for_frontend(msg):
     return None
 
 
+def merge_tool_messages(messages):
+    """合并工具调用和工具结果消息"""
+    import uuid
+    from app.core.logger import logger
+
+    logger.info(f"开始合并工具消息，原始消息数量: {len(messages)}")
+
+    formatted_messages = []
+    i = 0
+
+    while i < len(messages):
+        msg = messages[i]
+        formatted_msg = format_message_for_frontend(msg)
+
+        if not formatted_msg:
+            i += 1
+            continue
+
+        logger.info(f"处理消息 {i}: type={formatted_msg.get('type')}, content={formatted_msg.get('content', '')[:50]}...")
+
+        # 如果是工具调用消息，查找后续的工具结果消息
+        if formatted_msg.get("type") == "tool_call":
+            logger.info(f"发现工具调用消息，开始合并")
+            tool_operation_msg = {
+                "id": str(uuid.uuid4()),
+                "type": "tool_operation",
+                "role": "assistant",
+                "content": formatted_msg.get("content", ""),
+                "tool_calls": formatted_msg.get("tool_calls", []),
+                "tool_results": [],
+                "current_step": "calling",
+                "timestamp": formatted_msg.get("timestamp"),
+                "sender": "AI助手"
+            }
+
+            # 查找后续的工具结果消息
+            j = i + 1
+            tool_results_found = 0
+            while j < len(messages):
+                next_msg = messages[j]
+                next_formatted = format_message_for_frontend(next_msg)
+
+                if not next_formatted:
+                    j += 1
+                    continue
+
+                if next_formatted.get("type") == "tool_result":
+                    # 将工具结果添加到工具操作消息中
+                    tool_operation_msg["tool_results"].append({
+                        "tool_name": next_formatted.get("tool_name", ""),
+                        "tool_call_id": next_formatted.get("tool_call_id", ""),
+                        "content": next_formatted.get("content", "")
+                    })
+                    tool_operation_msg["current_step"] = "completed"
+                    tool_results_found += 1
+                    logger.info(f"找到工具结果消息 {tool_results_found}: {next_formatted.get('tool_name', '')}")
+                    j += 1
+                elif next_formatted.get("type") == "assistant" and tool_results_found > 0:
+                    # 如果已经找到工具结果，且遇到AI回复，将其作为工具操作的回复内容
+                    if next_formatted.get("content"):
+                        tool_operation_msg["content"] = next_formatted.get("content", "")
+                        logger.info(f"找到AI回复内容，添加到工具操作消息中")
+                    j += 1
+                    break
+                else:
+                    # 遇到其他类型消息，停止合并
+                    logger.info(f"遇到其他类型消息: {next_formatted.get('type')}，停止合并")
+                    break
+
+            formatted_messages.append(tool_operation_msg)
+            logger.info(f"工具操作消息合并完成，包含 {len(tool_operation_msg['tool_results'])} 个工具结果")
+            i = j  # 跳过已处理的工具结果消息
+
+        else:
+            # 非工具调用消息，直接添加
+            formatted_messages.append(formatted_msg)
+            i += 1
+
+    logger.info(f"消息合并完成，最终消息数量: {len(formatted_messages)}")
+    return formatted_messages
+
+
 @router.get("/{session_id}/messages")
 def get_session_messages(session_id: UUID, db = Depends(get_db)):
     """获取会话历史消息，从LangGraph检查点加载"""
@@ -261,13 +346,10 @@ def get_session_messages(session_id: UUID, db = Depends(get_db)):
             
             logger.info(f"从检查点加载了 {len(messages)} 条消息")
 
-            # 使用新的格式化函数处理消息
-            formatted_messages = []
-            for msg in messages:
-                logger.info(f"消息内容: {msg}")
-                formatted_msg = format_message_for_frontend(msg)
-                if formatted_msg:  # 只添加支持的消息类型
-                    formatted_messages.append(formatted_msg)
+            # 使用新的格式化函数处理消息，并合并工具相关消息
+            formatted_messages = merge_tool_messages(messages)
+
+            logger.info(f"返回的消息类型统计: {[msg.get('type', 'unknown') for msg in formatted_messages]}")
 
             return {"messages": formatted_messages}
             
