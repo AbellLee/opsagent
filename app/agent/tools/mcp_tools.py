@@ -1,7 +1,7 @@
 from typing import List, Dict, Any, Optional
 from langchain_core.tools import BaseTool
 from app.core.logger import logger
-from app.services.mcp_config import mcp_config_service
+from app.services.mcp import mcp_config_service
 
 try:
     from langchain_mcp_adapters.client import MultiServerMCPClient

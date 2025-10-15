@@ -13,7 +13,7 @@ from app.models.schemas import (
     MCPStdioConfig,
     MCPHttpConfig
 )
-from app.services.mcp_config import mcp_config_service
+from app.services.mcp import mcp_config_service
 from app.api.deps import get_db
 from app.core.logger import logger
 
