@@ -18,12 +18,29 @@
         :isStreaming="isLastMessageStreaming && index === sessionStore.messages.length - 1"
         class="chat-message"
       />
+
+      <!-- 回到底部按钮 -->
+      <Transition name="scroll-to-bottom">
+        <div
+          v-show="showScrollToBottomBtn"
+          class="scroll-to-bottom-btn"
+          @click="scrollManager.forceScrollToBottom()"
+        >
+          <n-button circle size="small" type="primary">
+            <n-icon size="16">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z"/>
+              </svg>
+            </n-icon>
+          </n-button>
+        </div>
+      </Transition>
     </div>
 
     <!-- 输入区域 -->
     <div class="input-container">
       <MessageInput
-        @send="scrollToBottom"
+        @send="handleMessageSend"
         @streaming-start="isLastMessageStreaming = true"
         @streaming-end="isLastMessageStreaming = false"
         class="message-input"
@@ -33,14 +50,15 @@
 </template>
 
 <script setup>
-import { ref, onMounted, watch, nextTick } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { useSessionStore } from '../stores/session'
 import { useUserStore } from '../stores/user'
-import { createDiscreteApi } from 'naive-ui'
+import { createDiscreteApi, NButton, NIcon } from 'naive-ui'
 import { messageAPI } from '../api'
 import ChatMessage from '../components/ChatMessage.vue'
 import MessageInput from '../components/MessageInput.vue'
+import { useScrollManager, SCROLL_SCENARIOS } from '../composables/useScrollManager'
 
 const { message } = createDiscreteApi(['message'])
 const router = useRouter()
@@ -51,38 +69,19 @@ const userStore = useUserStore()
 const messagesContainer = ref(null)
 const isLastMessageStreaming = ref(false)
 
-// 检查用户是否在底部附近（容差20px）
-const isNearBottom = () => {
-  if (!messagesContainer.value) return true // 容器不存在时默认认为在底部
-  const container = messagesContainer.value
-  const threshold = 20
+// 初始化滚动管理器
+const scrollManager = useScrollManager(messagesContainer)
 
-  // 如果内容高度小于等于容器高度，说明没有滚动条，认为在底部
-  if (container.scrollHeight <= container.clientHeight) {
-    return true
-  }
-
-  return container.scrollTop + container.clientHeight >= container.scrollHeight - threshold
-}
-
-// 智能滚动到底部（只有在用户在底部时才滚动）
-const scrollToBottom = (force = false) => {
-  nextTick(() => {
-    if (messagesContainer.value && (force || isNearBottom())) {
-      messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight
-    }
-  })
-}
+// 计算是否显示回到底部按钮
+const showScrollToBottomBtn = computed(() => {
+  return scrollManager.isUserScrolling.value && !scrollManager.isNearBottom.value
+})
 
 // 监听会话ID变化，切换会话时滚动到底部
 watch(() => sessionStore.sessionId, (newSessionId, oldSessionId) => {
   if (newSessionId && newSessionId !== oldSessionId) {
-    // 会话切换时，等待消息加载完成后滚动到底部
-    nextTick(() => {
-      setTimeout(() => {
-        scrollToBottom(true)
-      }, 100) // 给消息加载一点时间
-    })
+    // 会话切换时强制滚动到底部
+    scrollManager.scrollTo(SCROLL_SCENARIOS.FORCE, { delay: 150 })
   }
 })
 
@@ -95,40 +94,50 @@ onMounted(() => {
     return
   }
 
+  // 初始化滚动监听器
+  scrollManager.initScrollListener()
+
   // 检查是否选择了会话
   if (!sessionStore.sessionId) {
-    // 如果没有选择会话，不执行任何操作，让父组件显示欢迎页面
     return
   }
 
-  // 初始加载时，等待DOM渲染完成后滚动
-  nextTick(() => {
-    setTimeout(() => {
-      scrollToBottom(true)
-    }, 200) // 给消息渲染更多时间
-  })
+  // 初始加载时强制滚动到底部
+  scrollManager.scrollTo(SCROLL_SCENARIOS.FORCE, { delay: 200 })
 })
 
-// 监听消息数量变化（新消息时才滚动）
+// 组件卸载时清理资源
+onUnmounted(() => {
+  scrollManager.cleanup()
+})
+
+// 监听消息数量变化
 watch(() => sessionStore.messages.length, (newLength, oldLength) => {
-  // 只有当消息数量增加时才自动滚动（新消息）
   if (newLength > oldLength) {
-    scrollToBottom()
-  }
-  // 如果是从0到有消息（加载历史消息），强制滚动到底部
-  else if (oldLength === 0 && newLength > 0) {
-    scrollToBottom(true)
+    // 新消息到达，使用智能滚动
+    scrollManager.smartScrollToBottom()
+  } else if (oldLength === 0 && newLength > 0) {
+    // 加载历史消息，强制滚动到底部
+    scrollManager.forceScrollToBottom()
   }
 })
 
-// 监听消息内容变化，特别是流式输出时（只监听最后一条消息的内容）
+// 监听流式输出内容变化
 watch(() => {
   const lastMessage = sessionStore.messages[sessionStore.messages.length - 1]
   return lastMessage?.content || ''
 }, () => {
-  // 流式输出时滚动到底部
-  scrollToBottom()
+  // 流式输出时使用跟随滚动
+  if (isLastMessageStreaming.value) {
+    scrollManager.followScrollToBottom()
+  }
 })
+
+// 处理消息发送事件
+const handleMessageSend = () => {
+  // 发送消息后强制滚动到底部
+  scrollManager.forceScrollToBottom()
+}
 
 // 创建消息的辅助函数
 const createMessage = (role, content) => ({
@@ -149,7 +158,7 @@ const sendMessageAndGetReply = async (messageContent) => {
     // 添加用户消息
     const userMessage = createMessage('user', messageContent)
     sessionStore.addMessage(userMessage)
-    scrollToBottom(true) // 发送消息时强制滚动
+    scrollManager.forceScrollToBottom() // 发送消息时强制滚动
 
     // 发送消息到后端获取AI回复
     const response = await messageAPI.send(sessionStore.sessionId, {
@@ -160,7 +169,7 @@ const sendMessageAndGetReply = async (messageContent) => {
     if (response && response.response) {
       const assistantMessage = createMessage('assistant', response.response)
       sessionStore.addMessage(assistantMessage)
-      scrollToBottom(true) // 收到回复时强制滚动
+      scrollManager.forceScrollToBottom() // 收到回复时强制滚动
     }
   } catch (error) {
     console.error('发送消息失败:', error)
@@ -262,6 +271,40 @@ const sendExample = async () => {
 
 .chat-message:last-child {
   margin-bottom: 0;
+}
+
+/* 回到底部按钮 */
+.scroll-to-bottom-btn {
+  position: fixed;
+  bottom: 180px;
+  right: 30px;
+  z-index: 1000;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  border-radius: 50%;
+}
+
+.scroll-to-bottom-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
+}
+
+/* 回到底部按钮动画 */
+.scroll-to-bottom-enter-active,
+.scroll-to-bottom-leave-active {
+  transition: all 0.3s ease;
+}
+
+.scroll-to-bottom-enter-from,
+.scroll-to-bottom-leave-to {
+  opacity: 0;
+  transform: translateY(20px) scale(0.8);
+}
+
+.scroll-to-bottom-enter-to,
+.scroll-to-bottom-leave-from {
+  opacity: 1;
+  transform: translateY(0) scale(1);
 }
 
 /* 暗色模式 */

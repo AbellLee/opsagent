@@ -40,24 +40,32 @@
       <!-- 响应模式选择和字数统计 -->
       <div class="bottom-controls">
         <div class="response-mode-wrapper">
-          <n-radio-group v-model:value="responseMode" size="small">
-            <n-radio-button value="blocking">
-              <n-icon size="14" style="margin-right: 4px;">
+          <div class="mode-selector">
+            <div
+              class="mode-option"
+              :class="{ active: responseMode === 'blocking' }"
+              @click="responseMode = 'blocking'"
+            >
+              <div class="mode-icon">
                 <svg viewBox="0 0 24 24" fill="currentColor">
                   <path d="M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2M12,4A8,8 0 0,1 20,12A8,8 0 0,1 12,20A8,8 0 0,1 4,12A8,8 0 0,1 12,4M12,6A6,6 0 0,0 6,12A6,6 0 0,0 12,18A6,6 0 0,0 18,12A6,6 0 0,0 12,6Z"/>
                 </svg>
-              </n-icon>
-              阻塞
-            </n-radio-button>
-            <n-radio-button value="streaming">
-              <n-icon size="14" style="margin-right: 4px;">
+              </div>
+              <span class="mode-text">阻塞</span>
+            </div>
+            <div
+              class="mode-option"
+              :class="{ active: responseMode === 'streaming' }"
+              @click="responseMode = 'streaming'"
+            >
+              <div class="mode-icon">
                 <svg viewBox="0 0 24 24" fill="currentColor">
                   <path d="M5,13L9,17L7.5,18.5L1,12L7.5,5.5L9,7L5,11H21V13H5M21,6V8H11V6H21M21,16V18H11V16H21Z"/>
                 </svg>
-              </n-icon>
-              流式
-            </n-radio-button>
-          </n-radio-group>
+              </div>
+              <span class="mode-text">流式</span>
+            </div>
+          </div>
         </div>
 
         <div class="char-count-wrapper">
@@ -401,31 +409,46 @@ onMounted(() => {
 
 <style scoped>
 .message-input-wrapper {
-  padding: 16px;
-  background: #ffffff;
-  border-top: 1px solid #e5e7eb;
+  padding: 20px;
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+  border-top: 1px solid rgba(226, 232, 240, 0.8);
+  backdrop-filter: blur(10px);
 }
 
 .input-container {
   max-width: 95%;
   margin: 0 auto;
   position: relative;
+  background: white;
+  border-radius: 16px;
+  box-shadow:
+    0 4px 6px -1px rgba(0, 0, 0, 0.1),
+    0 2px 4px -1px rgba(0, 0, 0, 0.06),
+    0 0 0 1px rgba(0, 0, 0, 0.05);
+  transition: all 0.3s ease;
+  overflow: hidden;
+}
+
+.input-container:hover {
+  box-shadow:
+    0 10px 15px -3px rgba(0, 0, 0, 0.1),
+    0 4px 6px -2px rgba(0, 0, 0, 0.05),
+    0 0 0 1px rgba(59, 130, 246, 0.1);
+  transform: translateY(-1px);
 }
 
 /* 输入框容器 */
 .textarea-wrapper {
   position: relative;
   background: white;
-  border: 1px solid #e2e8f0;
-  border-radius: 12px;
-  /* 预设阴影空间，避免聚焦时跳动 */
-  box-shadow: 0 0 0 3px transparent;
-  transition: all 0.2s ease;
+  border: none;
+  border-radius: 12px 12px 0 0;
+  transition: all 0.3s ease;
+  padding: 4px;
 }
 
 .textarea-wrapper:focus-within {
-  border-color: #3b82f6;
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+  background: linear-gradient(135deg, #fefefe 0%, #f8fafc 100%);
 }
 
 .message-textarea {
@@ -463,22 +486,35 @@ onMounted(() => {
 /* 发送按钮 */
 .send-button-wrapper {
   position: absolute;
-  right: 12px;
-  bottom: 12px;
+  right: 16px;
+  bottom: 16px;
   z-index: 10;
 }
 
 .send-button {
-  width: 40px;
-  height: 40px;
+  width: 44px;
+  height: 44px;
   border-radius: 50%;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  transition: all 0.2s ease;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border: none;
+  box-shadow:
+    0 4px 8px rgba(102, 126, 234, 0.3),
+    0 2px 4px rgba(0, 0, 0, 0.1);
+  transition: all 0.3s ease;
 }
 
 .send-button:hover:not(:disabled) {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  transform: translateY(-2px) scale(1.05);
+  box-shadow:
+    0 8px 16px rgba(102, 126, 234, 0.4),
+    0 4px 8px rgba(0, 0, 0, 0.15);
+  background: linear-gradient(135deg, #5a67d8 0%, #6b46c1 100%);
+}
+
+.send-button:disabled {
+  background: #e2e8f0;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  transform: none;
 }
 
 /* 底部控件 */
@@ -486,16 +522,75 @@ onMounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 8px 12px 0;
-  gap: 12px;
+  padding: 16px 20px;
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+  border-radius: 0 0 12px 12px;
+  border-top: 1px solid rgba(226, 232, 240, 0.6);
 }
 
-.response-mode-wrapper {
-  flex-shrink: 0;
+/* 新的模式选择器 */
+.mode-selector {
+  display: flex;
+  background: white;
+  border-radius: 8px;
+  padding: 4px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  border: 1px solid rgba(226, 232, 240, 0.8);
+}
+
+.mode-option {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-size: 13px;
+  font-weight: 500;
+  color: #64748b;
+  min-width: 70px;
+  justify-content: center;
+}
+
+.mode-option:hover {
+  background: rgba(59, 130, 246, 0.05);
+  color: #3b82f6;
+}
+
+.mode-option.active {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  box-shadow: 0 2px 4px rgba(102, 126, 234, 0.3);
+}
+
+.mode-icon {
+  width: 14px;
+  height: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.mode-icon svg {
+  width: 100%;
+  height: 100%;
+}
+
+.mode-text {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
 }
 
 .char-count-wrapper {
-  flex-shrink: 0;
+  font-size: 12px;
+  color: #64748b;
+  font-weight: 500;
+  padding: 4px 8px;
+  background: rgba(255, 255, 255, 0.8);
+  border-radius: 6px;
+  border: 1px solid rgba(226, 232, 240, 0.6);
 }
 
 .char-count {
@@ -515,19 +610,59 @@ onMounted(() => {
 
 /* 暗色模式 */
 html.dark .message-input-wrapper {
-  background: #1f2937;
-  border-top-color: #374151;
+  background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+  border-top-color: #334155;
+}
+
+html.dark .input-container {
+  background: #1e293b;
+  box-shadow:
+    0 4px 6px -1px rgba(0, 0, 0, 0.3),
+    0 2px 4px -1px rgba(0, 0, 0, 0.2),
+    0 0 0 1px rgba(71, 85, 105, 0.3);
+}
+
+html.dark .input-container:hover {
+  box-shadow:
+    0 10px 15px -3px rgba(0, 0, 0, 0.3),
+    0 4px 6px -2px rgba(0, 0, 0, 0.2),
+    0 0 0 1px rgba(59, 130, 246, 0.3);
 }
 
 html.dark .textarea-wrapper {
-  background: #1f2937;
-  border-color: #4b5563;
-  box-shadow: 0 0 0 3px transparent;
+  background: #1e293b;
 }
 
 html.dark .textarea-wrapper:focus-within {
-  border-color: #3b82f6;
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+  background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+}
+
+html.dark .bottom-controls {
+  background: linear-gradient(135deg, #334155 0%, #1e293b 100%);
+  border-top-color: rgba(71, 85, 105, 0.6);
+}
+
+html.dark .mode-selector {
+  background: #0f172a;
+  border-color: rgba(71, 85, 105, 0.8);
+}
+
+html.dark .mode-option {
+  color: #94a3b8;
+}
+
+html.dark .mode-option:hover {
+  background: rgba(59, 130, 246, 0.1);
+  color: #60a5fa;
+}
+
+html.dark .char-count-wrapper {
+  background: rgba(15, 23, 42, 0.8);
+  border-color: rgba(71, 85, 105, 0.6);
+}
+
+html.dark .char-count {
+  color: #94a3b8;
 }
 
 html.dark .message-textarea {

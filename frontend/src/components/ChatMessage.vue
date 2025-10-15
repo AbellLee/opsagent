@@ -195,10 +195,13 @@ const toggleSequenceItem = (index) => {
       // 切换展开状态
       item.expanded = !item.expanded
 
-      // 在下一个tick恢复滚动位置（如果用户不在底部）
+      // 保持滚动位置（使用PRESERVE场景）
       nextTick(() => {
         if (container && scrollTop > 0) {
-          const isNearBottom = scrollTop + container.clientHeight >= container.scrollHeight - 50
+          const threshold = 50
+          const isNearBottom = scrollTop + container.clientHeight >= container.scrollHeight - threshold
+
+          // 如果用户不在底部，恢复原位置
           if (!isNearBottom) {
             container.scrollTop = scrollTop
           }
