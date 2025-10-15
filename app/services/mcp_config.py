@@ -303,10 +303,19 @@ class MCPConfigService:
         """获取启用的MCP配置，返回字典格式用于MultiServerMCPClient"""
         configs = self.list_mcp_configs(enabled_only=True)
         result = {}
-        
+
         for config in configs:
-            result[config.name] = config.config
-            
+            # 复制配置以避免修改原始数据
+            config_dict = config.config.copy()
+
+            # 如果配置使用 'type' 字段，转换为 'transport' 字段
+            # langchain-mcp-adapters 要求必须使用 'transport' 字段
+            if 'type' in config_dict and 'transport' not in config_dict:
+                config_dict['transport'] = config_dict.pop('type')
+                logger.info(f"配置 '{config.name}' 的 'type' 字段已转换为 'transport'")
+
+            result[config.name] = config_dict
+
         logger.info(f"加载了 {len(result)} 个启用的MCP服务器配置: {list(result.keys())}")
         return result
 

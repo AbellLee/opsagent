@@ -13,7 +13,13 @@
           <template #icon>
             <n-icon><Refresh /></n-icon>
           </template>
-          刷新
+          刷新配置
+        </n-button>
+        <n-button @click="reloadMCPTools" :loading="reloading" type="success">
+          <template #icon>
+            <n-icon><Refresh /></n-icon>
+          </template>
+          重载工具
         </n-button>
         <n-switch v-model:value="showEnabledOnly" @update:value="loadConfigs">
           <template #checked>只显示启用的</template>
@@ -54,8 +60,10 @@
         <n-form-item label="配置JSON" path="configJson">
           <n-space vertical>
             <n-space>
-              <n-button size="small" @click="fillExample('stdio')">填入stdio示例</n-button>
-              <n-button size="small" @click="fillExample('http')">填入HTTP示例</n-button>
+              <n-button size="small" @click="fillExample('stdio')">stdio示例</n-button>
+              <n-button size="small" @click="fillExample('http')">HTTP示例</n-button>
+              <n-button size="small" @click="fillExample('sse')">SSE示例</n-button>
+              <n-button size="small" @click="fillExample('websocket')">WebSocket示例</n-button>
             </n-space>
             <n-input
               v-model:value="formData.configJson"
@@ -121,6 +129,7 @@ const { message } = createDiscreteApi(['message'])
 // 响应式数据
 const configs = ref([])
 const loading = ref(false)
+const reloading = ref(false)
 const showEnabledOnly = ref(false)
 const showCreateModal = ref(false)
 const submitting = ref(false)
@@ -145,6 +154,18 @@ const configExamples = {
   http: {
     url: "http://localhost:8000/mcp/",
     transport: "streamable_http"
+  },
+  sse: {
+    transport: "sse",
+    url: "http://localhost:3000/sse",
+    headers: {},
+    timeout: 60,
+    sse_read_timeout: 60
+  },
+  websocket: {
+    transport: "websocket",
+    url: "ws://localhost:8000/ws",
+    timeout: 60
   }
 }
 
@@ -174,11 +195,18 @@ const columns = [
   {
     title: '协议',
     key: 'transport',
-    width: 100,
+    width: 120,
     render: (row) => {
-      const type = row.config.transport === 'stdio' ? 'info' : 'success'
-      const text = row.config.transport === 'stdio' ? 'stdio' : 'HTTP'
-      return h(NTag, { type, size: 'small' }, { default: () => text })
+      const protocolType = row.config.transport || row.config.type || 'unknown'
+      const typeMap = {
+        'stdio': { type: 'info', text: 'stdio' },
+        'streamable_http': { type: 'success', text: 'HTTP' },
+        'http': { type: 'success', text: 'HTTP' },
+        'sse': { type: 'warning', text: 'SSE' },
+        'websocket': { type: 'primary', text: 'WebSocket' }
+      }
+      const config = typeMap[protocolType] || { type: 'default', text: protocolType }
+      return h(NTag, { type: config.type, size: 'small' }, { default: () => config.text })
     }
   },
   {
@@ -230,29 +258,26 @@ function validateConfigJson(rule, value) {
   try {
     const config = JSON.parse(value)
 
-    // 验证必需字段
-    if (!config.transport) {
-      return new Error('配置中缺少 transport 字段')
+    // 支持 transport 或 type 字段
+    const protocolType = config.transport || config.type
+    if (!protocolType) {
+      return new Error('配置中必须包含 transport 或 type 字段')
     }
 
-    if (!['stdio', 'streamable_http'].includes(config.transport)) {
-      return new Error('transport 必须是 "stdio" 或 "streamable_http"')
-    }
-
-    if (config.transport === 'stdio') {
+    // 根据协议类型进行基本验证
+    if (protocolType === 'stdio') {
       if (!config.command) {
         return new Error('stdio 协议需要 command 字段')
       }
       if (!config.args || !Array.isArray(config.args)) {
         return new Error('stdio 协议需要 args 字段（数组类型）')
       }
-    }
-
-    if (config.transport === 'streamable_http') {
+    } else if (['streamable_http', 'http', 'sse', 'websocket'].includes(protocolType)) {
       if (!config.url) {
-        return new Error('streamable_http 协议需要 url 字段')
+        return new Error(`${protocolType} 协议需要 url 字段`)
       }
     }
+    // 其他协议类型不进行严格验证
 
     return true
   } catch (e) {
@@ -271,6 +296,25 @@ const loadConfigs = async () => {
     message.error('加载配置失败: ' + errorMsg)
   } finally {
     loading.value = false
+  }
+}
+
+const reloadMCPTools = async () => {
+  try {
+    reloading.value = true
+    const result = await mcpConfigAPI.reload()
+
+    if (result.success) {
+      message.success(`重载成功！加载了 ${result.mcp_tools_count} 个MCP工具，总计 ${result.total_tools_count} 个工具`)
+    } else {
+      message.error('重载失败: ' + result.message)
+    }
+  } catch (error) {
+    console.error('重载MCP工具失败:', error)
+    const errorMsg = error.response?.data?.detail || error.message || '未知错误'
+    message.error('重载MCP工具失败: ' + errorMsg)
+  } finally {
+    reloading.value = false
   }
 }
 
@@ -327,7 +371,20 @@ const handleSubmit = async () => {
     await loadConfigs()
   } catch (error) {
     console.error('创建/更新配置失败:', error)
-    const errorMsg = error.response?.data?.detail || error.message || '未知错误'
+    console.error('错误响应数据:', error.response?.data)
+
+    let errorMsg = '未知错误'
+    if (error.response?.data?.detail) {
+      if (Array.isArray(error.response.data.detail)) {
+        // FastAPI验证错误格式
+        errorMsg = error.response.data.detail.map(err => `${err.loc?.join('.')}: ${err.msg}`).join('; ')
+      } else {
+        errorMsg = error.response.data.detail
+      }
+    } else if (error.message) {
+      errorMsg = error.message
+    }
+
     message.error('操作失败: ' + errorMsg)
   } finally {
     submitting.value = false

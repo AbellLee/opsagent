@@ -47,6 +47,48 @@ class ToolManager:
             logger.error(f"同步加载MCP工具失败: {e}")
             logger.info("将继续使用自定义工具")
 
+    def reload_mcp_tools(self) -> Dict[str, Any]:
+        """重新加载MCP工具"""
+        try:
+            logger.info("开始重新加载MCP工具...")
+
+            # 移除旧的MCP工具
+            mcp_tool_names = mcp_tool_manager.list_mcp_tools()
+            for tool_name in mcp_tool_names:
+                if tool_name in self.tools:
+                    del self.tools[tool_name]
+                    logger.info(f"移除旧的MCP工具: {tool_name}")
+
+            # 重新加载MCP配置和工具
+            mcp_tool_manager.mcp_servers_config = mcp_tool_manager._load_mcp_servers_config()
+            mcp_tool_manager.mcp_client = None  # 重置客户端，强制重新初始化
+            mcp_tool_manager.tools.clear()  # 清空工具缓存
+
+            # 加载新的MCP工具
+            self._load_mcp_tools_sync()
+
+            # 统计结果
+            new_mcp_tools = mcp_tool_manager.list_mcp_tools()
+            total_tools = len(self.tools)
+
+            logger.info(f"MCP工具重新加载完成，当前共有 {total_tools} 个工具（包含 {len(new_mcp_tools)} 个MCP工具）")
+
+            return {
+                "success": True,
+                "message": "MCP工具重新加载成功",
+                "mcp_tools_count": len(new_mcp_tools),
+                "total_tools_count": total_tools,
+                "mcp_tools": new_mcp_tools
+            }
+
+        except Exception as e:
+            logger.error(f"重新加载MCP工具失败: {e}")
+            return {
+                "success": False,
+                "message": f"重新加载MCP工具失败: {str(e)}",
+                "error": str(e)
+            }
+
     def get_tool(self, name: str) -> BaseTool:
         """根据名称获取工具"""
         return self.tools.get(name)

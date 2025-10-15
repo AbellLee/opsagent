@@ -767,21 +767,26 @@ onMounted(() => {
   }
 }
 
-/* 代码块样式 */
-.message-content :deep(pre) {
-  background-color: #f8f9fa;
-  color: #212529;
+/* 代码块样式 - GitHub Light 主题 */
+.message-content :deep(pre),
+.text-content :deep(pre),
+.detail-content :deep(pre) {
+  background-color: #f6f8fa;
+  color: #24292f;
   padding: 16px;
-  border-radius: 8px;
+  border-radius: 6px;
   overflow-x: auto;
-  margin: 12px 0;
-  border: 1px solid #e9ecef;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-  font-family: 'Fira Code', 'Courier New', monospace;
-  line-height: 1.5;
+  margin: 16px 0;
+  border: 1px solid #d0d7de;
+  box-shadow: none;
+  font-family: 'SFMono-Regular', 'Consolas', 'Liberation Mono', 'Menlo', monospace;
+  line-height: 1.45;
+  position: relative;
 }
 
-.message-content :deep(code) {
+.message-content :deep(code),
+.text-content :deep(code),
+.detail-content :deep(code) {
   background-color: #f8f9fa;
   color: #495057;
   padding: 2px 6px;
@@ -791,11 +796,72 @@ onMounted(() => {
   border: 1px solid #e9ecef;
 }
 
-.message-content :deep(pre code) {
+.message-content :deep(pre code),
+.text-content :deep(pre code),
+.detail-content :deep(pre code) {
   background-color: transparent;
   color: inherit;
   padding: 0;
   border: none;
+  font-size: 14px;
+}
+
+/* Prism.js 语法高亮样式覆盖 - GitHub Light 主题 */
+.message-content :deep(.token.comment),
+.text-content :deep(.token.comment) {
+  color: #6a737d;
+  font-style: italic;
+}
+
+.message-content :deep(.token.keyword),
+.text-content :deep(.token.keyword) {
+  color: #d73a49;
+  font-weight: 600;
+}
+
+.message-content :deep(.token.string),
+.text-content :deep(.token.string) {
+  color: #032f62;
+}
+
+.message-content :deep(.token.function),
+.text-content :deep(.token.function) {
+  color: #6f42c1;
+}
+
+.message-content :deep(.token.number),
+.text-content :deep(.token.number) {
+  color: #005cc5;
+}
+
+.message-content :deep(.token.operator),
+.text-content :deep(.token.operator) {
+  color: #d73a49;
+}
+
+.message-content :deep(.token.punctuation),
+.text-content :deep(.token.punctuation) {
+  color: #24292f;
+}
+
+.message-content :deep(.token.builtin),
+.text-content :deep(.token.builtin) {
+  color: #005cc5;
+}
+
+.message-content :deep(.token.class-name),
+.text-content :deep(.token.class-name) {
+  color: #6f42c1;
+}
+
+.message-content :deep(.token.boolean),
+.text-content :deep(.token.boolean) {
+  color: #005cc5;
+}
+
+.message-content :deep(.token.variable),
+.text-content :deep(.token.variable) {
+  color: #e36209;
 }
 
 /* 标题样式 */
@@ -1188,5 +1254,68 @@ onMounted(() => {
   50% {
     opacity: 0.5;
   }
+}
+
+/* 暗色模式下的代码块样式 - GitHub Dark */
+html.dark .message-content :deep(pre),
+html.dark .text-content :deep(pre),
+html.dark .detail-content :deep(pre) {
+  background-color: #0d1117;
+  color: #e6edf3;
+  border-color: #30363d;
+}
+
+html.dark .message-content :deep(code),
+html.dark .text-content :deep(code),
+html.dark .detail-content :deep(code) {
+  background-color: rgba(110, 118, 129, 0.4);
+  color: #e6edf3;
+  border-color: #30363d;
+}
+
+/* 暗色模式下的语法高亮 */
+html.dark .message-content :deep(.token.comment),
+html.dark .text-content :deep(.token.comment) {
+  color: #8b949e;
+}
+
+html.dark .message-content :deep(.token.keyword),
+html.dark .text-content :deep(.token.keyword) {
+  color: #ff7b72;
+}
+
+html.dark .message-content :deep(.token.string),
+html.dark .text-content :deep(.token.string) {
+  color: #a5d6ff;
+}
+
+html.dark .message-content :deep(.token.function),
+html.dark .text-content :deep(.token.function) {
+  color: #d2a8ff;
+}
+
+html.dark .message-content :deep(.token.number),
+html.dark .text-content :deep(.token.number) {
+  color: #79c0ff;
+}
+
+html.dark .message-content :deep(.token.operator),
+html.dark .text-content :deep(.token.operator) {
+  color: #ff7b72;
+}
+
+html.dark .message-content :deep(.token.builtin),
+html.dark .text-content :deep(.token.builtin) {
+  color: #79c0ff;
+}
+
+html.dark .message-content :deep(.token.class-name),
+html.dark .text-content :deep(.token.class-name) {
+  color: #ffa657;
+}
+
+html.dark .message-content :deep(.token.variable),
+html.dark .text-content :deep(.token.variable) {
+  color: #ffa657;
 }
 </style>
