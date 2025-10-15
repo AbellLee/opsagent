@@ -311,7 +311,7 @@ const highlightCode = async () => {
       try {
         window.Prism.highlightAllUnder(container)
       } catch (error) {
-        console.warn('Prism代码高亮失败:', error)
+        // 静默处理高亮失败
       }
     }
 
@@ -332,17 +332,12 @@ const highlightCode = async () => {
           }
         })
 
-        console.log('准备渲染Mermaid图表，元素数量:', mermaidElements.length)
-
         // 渲染Mermaid图表
-        const results = await window.mermaid.run({
+        await window.mermaid.run({
           nodes: mermaidElements,
           suppressErrors: false
         })
-
-        console.log('Mermaid渲染完成:', results)
       } catch (error) {
-        console.warn('Mermaid渲染失败:', error)
         // 在元素中显示错误信息
         mermaidElements.forEach(element => {
           element.innerHTML = `<div style="color: red; font-style: italic;">

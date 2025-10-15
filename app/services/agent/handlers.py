@@ -8,12 +8,12 @@ import uuid
 from datetime import datetime
 from fastapi.responses import StreamingResponse
 from langchain_core.messages import HumanMessage, AIMessage, ToolMessage
-from langgraph.checkpoint.postgres import PostgresSaver
-from langgraph.store.postgres import PostgresStore
+from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+from langgraph.store.postgres.aio import AsyncPostgresStore
 
 from app.core.logger import logger
 from app.core.config import settings
-from app.agent.graph import create_graph
+from app.agent.graph import create_graph_async
 from app.services.agent.models import ChatCompletionResponse, ChunkChatCompletionResponse
 from app.services.agent.utils import build_agent_inputs, create_agent_config
 
@@ -22,16 +22,16 @@ async def execute_agent_task(session_id: UUID, message: str, tools=None, config=
     """执行Agent任务的核心业务逻辑"""
     # 构造输入
     inputs = build_agent_inputs(message, session_id)
-    
-    # 按照langgraph规范，使用PostgresSaver作为上下文管理器
-    with PostgresSaver.from_conn_string(settings.database_url) as checkpointer:
+
+    # 使用异步上下文管理器
+    async with AsyncPostgresSaver.from_conn_string(settings.database_url) as checkpointer:
         # 确保检查点表已创建
-        checkpointer.setup()
-        # 创建新的agent graph实例
-        agent_graph = create_graph(checkpointer=checkpointer)
+        await checkpointer.setup()
+        # 创建新的agent graph实例（异步加载MCP工具）
+        agent_graph = await create_graph_async(checkpointer=checkpointer)
         # 执行Agent图，并传入检查点配置
         config = create_agent_config(session_id)
-        result = agent_graph.invoke(inputs, config, checkpointer=checkpointer)
+        result = await agent_graph.ainvoke(inputs, config)
     
     # 提取响应消息 - 只获取最后的AIMessage
     messages = result.get("messages", [])
@@ -52,19 +52,19 @@ async def execute_agent_task(session_id: UUID, message: str, tools=None, config=
 
 async def handle_blocking_chat(session_id: UUID, inputs: Dict[str, Any], config: Dict[str, Any]) -> ChatCompletionResponse:
     """处理阻塞模式的聊天 - 使用LangGraph标准流程"""
-    # 按照LangGraph规范，使用PostgresSaver作为上下文管理器
-    with (
-        PostgresStore.from_conn_string(settings.database_url) as store,
-        PostgresSaver.from_conn_string(settings.database_url) as checkpointer,
+    # 使用异步上下文管理器
+    async with (
+        AsyncPostgresStore.from_conn_string(settings.database_url) as store,
+        AsyncPostgresSaver.from_conn_string(settings.database_url) as checkpointer,
     ):
         # 确保检查点表已创建
-        checkpointer.setup()
+        await checkpointer.setup()
 
-        # 创建graph实例
-        graph = create_graph(checkpointer=checkpointer, store=store)
+        # 创建graph实例（异步加载MCP工具）
+        graph = await create_graph_async(checkpointer=checkpointer, store=store)
 
-        # 执行graph
-        result = graph.invoke(inputs, config)
+        # 执行graph（异步）
+        result = await graph.ainvoke(inputs, config)
 
         # 获取执行过程中的所有新消息
         messages = result.get("messages", [])
@@ -104,18 +104,18 @@ async def handle_blocking_chat(session_id: UUID, inputs: Dict[str, Any], config:
 
 async def handle_streaming_chat(session_id: UUID, inputs: Dict[str, Any], config: Dict[str, Any]):
     """处理流式模式的聊天 - 使用LangGraph标准流程进行流式输出"""
-    
-    def generate_stream():
-        """生成SSE流式数据"""
 
-        with (
-            PostgresStore.from_conn_string(settings.database_url) as store,
-            PostgresSaver.from_conn_string(settings.database_url) as checkpointer,
+    async def generate_stream():
+        """生成SSE流式数据（异步生成器）"""
+
+        async with (
+            AsyncPostgresStore.from_conn_string(settings.database_url) as store,
+            AsyncPostgresSaver.from_conn_string(settings.database_url) as checkpointer,
         ):
 
-            # 创建graph实例
-            graph = create_graph(checkpointer=checkpointer, store=store)
-            
+            # 创建graph实例（异步加载MCP工具）
+            graph = await create_graph_async(checkpointer=checkpointer, store=store)
+
             # 回到messages模式，但改进工具调用处理逻辑
             # 重要：不要中途break，让LangGraph完整执行以确保状态正确保存
             try:
@@ -123,7 +123,7 @@ async def handle_streaming_chat(session_id: UUID, inputs: Dict[str, Any], config
                 pending_tool_calls = {}  # 存储待完成的工具调用
                 message_count = 0
 
-                for chunk, _ in graph.stream(inputs, config, stream_mode="messages"):
+                async for chunk, _ in graph.astream(inputs, config, stream_mode="messages"):
                     message_count += 1
 
                     # 处理AIMessage - 包括普通回复和工具调用

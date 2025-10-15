@@ -1,3 +1,17 @@
+# ============================================
+# 必须在所有导入之前设置事件循环策略!
+# ============================================
+import asyncio
+import platform
+
+# Windows平台需要设置事件循环策略以支持psycopg异步操作
+if platform.system() == 'Windows':
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+    print("✓ 已设置Windows SelectorEventLoop策略")
+
+# ============================================
+# 现在可以安全地导入其他模块
+# ============================================
 import sys
 import os
 import traceback
@@ -73,17 +87,18 @@ if __name__ == "__main__":
     import uvicorn
 
     # 配置uvicorn以支持真正的流式响应
+    # 注意: reload=True 会自动在Windows上使用SelectorEventLoop
     uvicorn.run(
-        app,
+        "main:app",  # 使用import string以支持reload
         host="0.0.0.0",
         port=8000,
+        reload=True,  # 在Windows上自动使用SelectorEventLoop
+        loop="asyncio",
         # 关键配置：禁用缓冲和优化流式传输
-        access_log=False,  # 禁用访问日志减少缓冲
-        timeout_keep_alive=1,  # 短超时
+        access_log=False,
+        timeout_keep_alive=1,
         timeout_graceful_shutdown=1,
-        # 使用较小的限制来减少缓冲
         limit_concurrency=50,
         limit_max_requests=100,
-        # 禁用HTTP/1.1的keep-alive
         h11_max_incomplete_event_size=16384,
     )

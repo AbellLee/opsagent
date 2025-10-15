@@ -29,7 +29,6 @@ const currentSession = computed(() => {
     }
     return sessionStore.sessions.find(s => s.session_id === sessionStore.sessionId) || { session_name: '请选择或新建对话', session_id: null }
   } catch (error) {
-    console.warn('获取当前会话信息失败:', error)
     return { session_name: '请选择或新建对话', session_id: null }
   }
 })

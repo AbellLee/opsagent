@@ -70,22 +70,14 @@ watch(() => userStore.isAuthenticated, async (isAuthenticated, wasAuthenticated)
 
 // 监听路由变化，确保在访问聊天页面时加载会话列表
 watch(() => router.currentRoute.value.path, async (newPath, oldPath) => {
-  console.log('路由变化:', { newPath, oldPath })
-
   if (newPath === '/chat' && userStore.isAuthenticated) {
-    console.log('访问聊天页面且用户已登录，检查会话列表')
-
     // 如果会话列表为空，则加载
     if (!sessionStore.sessions || sessionStore.sessions.length === 0) {
-      console.log('会话列表为空，开始加载')
       try {
         await loadSessions()
-        console.log('路由变化后会话数据加载完成')
       } catch (error) {
         console.error('路由变化后加载会话数据失败:', error)
       }
-    } else {
-      console.log('会话列表已存在，跳过加载')
     }
   }
 }, { immediate: true })
@@ -121,18 +113,10 @@ onMounted(async () => {
 // 加载会话列表
 const loadSessions = async () => {
   try {
-    console.log('开始加载会话列表...')
-    // 传递用户ID以获取用户的会话列表
     const userId = userStore.user?.user_id
-    console.log('当前用户ID:', userId)
-
     if (userId) {
       const sessions = await sessionAPI.list(userId)
-      console.log('获取到的会话列表:', sessions)
       sessionStore.setSessions(sessions)
-      console.log('会话列表已设置到store')
-    } else {
-      console.warn('用户ID为空，无法加载会话列表')
     }
   } catch (error) {
     console.error('加载会话列表失败:', error)
@@ -142,7 +126,6 @@ const loadSessions = async () => {
 
 // 强制刷新会话列表（供外部调用）
 const refreshSessions = async () => {
-  console.log('强制刷新会话列表')
   if (userStore.isAuthenticated) {
     await loadSessions()
   }

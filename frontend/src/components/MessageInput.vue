@@ -254,8 +254,6 @@ const sendStreamingMessage = async (messageContent) => {
             for (const line of lines) {
               // 处理SSE事件格式
               if (line.startsWith('event: ')) {
-                const eventType = line.slice(7).trim()
-                console.log('SSE Event:', eventType)
                 continue
               }
 

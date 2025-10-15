@@ -238,13 +238,13 @@ def _validate_mcp_config(config: Dict[str, Any]) -> None:
 
 
 @router.post("/reload")
-def reload_mcp_tools(db = Depends(get_db)):
+async def reload_mcp_tools(db = Depends(get_db)):
     """重新加载MCP工具（热重载，无需重启应用）"""
     try:
-        from app.agent.tools import tool_manager
+        from app.agent.tools import mcp_manager
 
         logger.info("收到MCP工具重载请求")
-        result = tool_manager.reload_mcp_tools()
+        result = await mcp_manager.reload_mcp_tools()
 
         if result["success"]:
             logger.info(f"MCP工具重载成功: {result}")

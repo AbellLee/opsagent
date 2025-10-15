@@ -2,6 +2,12 @@ import { marked } from 'marked';
 import Prism from 'prismjs';
 import 'prismjs/themes/prism.css';
 
+// 导入额外的语言支持
+import 'prismjs/components/prism-sql';
+import 'prismjs/components/prism-bash';
+import 'prismjs/components/prism-json';
+import 'prismjs/components/prism-yaml';
+
 // 手动添加常用语言支持
 Prism.languages.python = Prism.languages.python || {
   'comment': {
@@ -84,8 +90,6 @@ renderer.code = function(code, language, isEscaped) {
   const actualCode = extractText(code);
   let actualLanguage = extractText(language);
 
-  console.log('代码块渲染:', { actualCode: actualCode.substring(0, 50), actualLanguage, availableLanguages: Object.keys(Prism.languages) });
-
   // 如果没有语言标识符，尝试自动检测
   if (!actualLanguage || actualLanguage.trim() === '') {
     // 简单的语言检测
@@ -98,7 +102,6 @@ renderer.code = function(code, language, isEscaped) {
     } else if (actualCode.includes('#!/bin/bash') || actualCode.includes('#!/bin/sh')) {
       actualLanguage = 'bash';
     }
-    console.log('自动检测语言:', actualLanguage);
   }
 
   // 处理 Mermaid 图表
@@ -112,13 +115,11 @@ renderer.code = function(code, language, isEscaped) {
   if (actualLanguage && Prism.languages[actualLanguage]) {
     try {
       highlightedCode = Prism.highlight(actualCode, Prism.languages[actualLanguage], actualLanguage);
-      console.log('代码高亮成功:', actualLanguage);
     } catch (error) {
       console.warn('代码高亮失败:', error);
       highlightedCode = actualCode;
     }
   } else {
-    console.warn('语言不支持或未找到:', actualLanguage, 'Available:', Object.keys(Prism.languages));
     // 如果没有语言支持，至少应用基本的HTML转义
     highlightedCode = actualCode
       .replace(/&/g, '&amp;')
@@ -140,21 +141,16 @@ export function parseMarkdown(text) {
 
     // 确保输入是字符串
     if (typeof text !== 'string') {
-      console.warn('parseMarkdown received non-string input:', typeof text, text);
       text = String(text);
     }
-
-    console.log('解析Markdown文本:', text.substring(0, 200));
 
     // 解析 Markdown
     const result = marked.parse(text);
 
-    console.log('Markdown解析结果:', result.substring(0, 200));
-
     // 确保返回字符串
     return typeof result === 'string' ? result : String(result);
   } catch (error) {
-    console.error('Markdown解析失败:', error, { input: text });
+    console.error('Markdown解析失败:', error);
 
     // 降级处理：返回HTML转义的纯文本
     const fallbackText = String(text || '');

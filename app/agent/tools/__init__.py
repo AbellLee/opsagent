@@ -3,82 +3,76 @@ from langchain_core.tools import BaseTool
 from app.agent.tools.custom_tools import get_custom_tools
 from app.agent.tools.mcp_tools import mcp_tool_manager
 from app.core.logger import logger
-from app.core.config import settings
-import psycopg2
-import asyncio
 
 class ToolManager:
-    """工具管理器"""
+    """自定义工具管理器 - 只管理自定义工具"""
 
     def __init__(self):
         self.tools: Dict[str, BaseTool] = {}
-        self._load_tools()
+        self._load_custom_tools()
 
-    def _load_tools(self):
-        """加载所有工具"""
-        # 加载自定义工具
+    def _load_custom_tools(self):
+        """加载自定义工具"""
         custom_tools = get_custom_tools()
         for tool in custom_tools:
             self.tools[tool.name] = tool
             logger.info(f"已加载自定义工具: {tool.name}")
 
-        # 同步加载MCP工具
-        self._load_mcp_tools_sync()
+        logger.info(f"自定义工具加载完成，共加载 {len(self.tools)} 个工具")
 
-        logger.info(f"工具加载完成，共加载 {len(self.tools)} 个工具")
+    def get_all_tools(self) -> List[BaseTool]:
+        """获取所有自定义工具"""
+        return list(self.tools.values())
+    def get_tool(self, name: str) -> BaseTool:
+        """根据名称获取自定义工具"""
+        return self.tools.get(name)
 
-    def _load_mcp_tools_sync(self):
-        """同步加载MCP工具"""
+    def list_tools(self) -> List[Dict[str, str]]:
+        """列出所有自定义工具"""
+        return [
+            {
+                "name": tool.name,
+                "description": tool.description,
+                "type": "Custom"
+            }
+            for tool in self.tools.values()
+        ]
+
+
+class MCPManager:
+    """MCP工具管理器 - 专门管理MCP工具"""
+
+    def __init__(self):
+        self.mcp_tool_manager = mcp_tool_manager
+
+    async def get_mcp_tools(self) -> List[BaseTool]:
+        """异步获取MCP工具"""
         try:
-            # 使用asyncio.run在新的事件循环中执行异步MCP工具加载
-            mcp_tools = asyncio.run(mcp_tool_manager.register_mcp_tools())
-
-            # 将MCP工具添加到工具字典中
-            for tool in mcp_tools:
-                self.tools[tool.name] = tool
-                logger.info(f"已加载MCP工具: {tool.name}")
-
-            if mcp_tools:
-                logger.info(f"成功加载 {len(mcp_tools)} 个MCP工具")
-            else:
-                logger.info("未加载任何MCP工具（可能未配置或初始化失败）")
-
+            tools = await self.mcp_tool_manager.register_mcp_tools()
+            logger.info(f"MCP工具加载成功，共 {len(tools)} 个工具")
+            return tools
         except Exception as e:
-            logger.error(f"同步加载MCP工具失败: {e}")
-            logger.info("将继续使用自定义工具")
+            logger.error(f"加载MCP工具失败: {e}")
+            return []
 
-    def reload_mcp_tools(self) -> Dict[str, Any]:
+    async def reload_mcp_tools(self) -> Dict[str, Any]:
         """重新加载MCP工具"""
         try:
             logger.info("开始重新加载MCP工具...")
 
-            # 移除旧的MCP工具
-            mcp_tool_names = mcp_tool_manager.list_mcp_tools()
-            for tool_name in mcp_tool_names:
-                if tool_name in self.tools:
-                    del self.tools[tool_name]
-                    logger.info(f"移除旧的MCP工具: {tool_name}")
+            # 重新加载MCP配置
+            self.mcp_tool_manager.mcp_servers_config = self.mcp_tool_manager._load_mcp_servers_config()
+            self.mcp_tool_manager.mcp_client = None  # 重置客户端
+            self.mcp_tool_manager.tools.clear()  # 清空缓存
 
-            # 重新加载MCP配置和工具
-            mcp_tool_manager.mcp_servers_config = mcp_tool_manager._load_mcp_servers_config()
-            mcp_tool_manager.mcp_client = None  # 重置客户端，强制重新初始化
-            mcp_tool_manager.tools.clear()  # 清空工具缓存
-
-            # 加载新的MCP工具
-            self._load_mcp_tools_sync()
-
-            # 统计结果
-            new_mcp_tools = mcp_tool_manager.list_mcp_tools()
-            total_tools = len(self.tools)
-
-            logger.info(f"MCP工具重新加载完成，当前共有 {total_tools} 个工具（包含 {len(new_mcp_tools)} 个MCP工具）")
+            # 加载新工具
+            tools = await self.get_mcp_tools()
 
             return {
                 "success": True,
                 "message": "MCP工具重新加载成功",
-                "mcp_tools_count": len(new_mcp_tools),
-                "total_tools_count": total_tools,
-                "mcp_tools": new_mcp_tools
+                "mcp_tools_count": len(tools),
+                "mcp_tools": [tool.name for tool in tools]
             }
 
         except Exception as e:
@@ -89,40 +83,29 @@ class ToolManager:
                 "error": str(e)
             }
 
-    def get_tool(self, name: str) -> BaseTool:
-        """根据名称获取工具"""
-        return self.tools.get(name)
+    def list_mcp_tools(self) -> List[str]:
+        """列出MCP工具名称"""
+        return self.mcp_tool_manager.list_mcp_tools()
 
-    def get_all_tools(self) -> List[BaseTool]:
-        """获取所有工具的列表，用于绑定到模型（包含自定义工具和MCP工具）"""
-        return list(self.tools.values())
 
-    def list_tools(self) -> List[Dict[str, str]]:
-        """列出所有工具（包含自定义工具和MCP工具）"""
-        tools_list = []
-        mcp_tool_names = mcp_tool_manager.list_mcp_tools()
+# 工具审批相关功能
+class ToolApprovalManager:
+    """工具审批管理器"""
 
-        for tool in self.tools.values():
-            tool_type = "MCP" if tool.name in mcp_tool_names else "Custom"
-            tools_list.append({
-                "name": tool.name,
-                "description": tool.description,
-                "type": tool_type
-            })
-
-        return tools_list
-    
     def _check_tool_approval(self, tool_name: str, user_id: Optional[str] = None) -> Dict[str, Any]:
         """检查工具是否需要审批"""
+        import psycopg2
+        from app.core.config import settings
+
         try:
             conn = psycopg2.connect(settings.database_url)
             cursor = conn.cursor()
-            
+
             # 首先检查用户特定配置
             if user_id:
                 cursor.execute("""
-                    SELECT auto_execute, approval_required 
-                    FROM tool_approval_config 
+                    SELECT auto_execute, approval_required
+                    FROM tool_approval_config
                     WHERE user_id = %s AND tool_name = %s
                 """, (user_id, tool_name))
                 result = cursor.fetchone()
@@ -131,11 +114,11 @@ class ToolManager:
                         "auto_execute": result[0],
                         "approval_required": result[1]
                     }
-            
+
             # 检查默认配置
             cursor.execute("""
-                SELECT auto_execute, approval_required 
-                FROM tool_approval_config 
+                SELECT auto_execute, approval_required
+                FROM tool_approval_config
                 WHERE user_id IS NULL AND tool_name = %s
             """, (tool_name,))
             result = cursor.fetchone()
@@ -144,7 +127,7 @@ class ToolManager:
                     "auto_execute": result[0],
                     "approval_required": result[1]
                 }
-            
+
             # 默认情况下需要审批
             return {
                 "auto_execute": False,
@@ -160,10 +143,10 @@ class ToolManager:
         finally:
             if 'conn' in locals():
                 conn.close()
-    
-    def execute_tool(self, name: str, tool_input: Dict[str, Any], user_id: Optional[str] = None) -> Dict[str, Any]:
+
+    def execute_tool(self, name: str, tool_input: Dict[str, Any], tool_manager: ToolManager, user_id: Optional[str] = None) -> Dict[str, Any]:
         """执行工具"""
-        tool = self.get_tool(name)
+        tool = tool_manager.get_tool(name)
         if not tool:
             return {
                 "error": f"工具 '{name}' 未找到",
@@ -198,5 +181,7 @@ class ToolManager:
                 "status": "error"
             }
 
-# 全局工具管理器实例
+# 全局管理器实例
 tool_manager = ToolManager()
+mcp_manager = MCPManager()
+approval_manager = ToolApprovalManager()
