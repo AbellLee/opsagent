@@ -187,7 +187,23 @@ const toggleSequenceItem = (index) => {
       if (typeof item.expanded === 'undefined') {
         item.expanded = false
       }
+
+      // 记录当前滚动位置
+      const container = document.querySelector('.messages-container')
+      const scrollTop = container?.scrollTop || 0
+
+      // 切换展开状态
       item.expanded = !item.expanded
+
+      // 在下一个tick恢复滚动位置（如果用户不在底部）
+      nextTick(() => {
+        if (container && scrollTop > 0) {
+          const isNearBottom = scrollTop + container.clientHeight >= container.scrollHeight - 50
+          if (!isNearBottom) {
+            container.scrollTop = scrollTop
+          }
+        }
+      })
     }
   }
 }
@@ -949,22 +965,29 @@ onMounted(() => {
 }
 
 .tool-call-item {
-  border-left: 3px solid #1890ff;
-  padding-left: 16px;
+  background: rgba(24, 144, 255, 0.03);
+  border: 1px solid rgba(24, 144, 255, 0.12);
+  border-radius: 6px;
+  padding: 12px 16px;
+  margin: 8px 0;
   position: relative;
+  transition: all 0.2s ease;
+}
+
+.tool-call-item:hover {
+  border-color: rgba(24, 144, 255, 0.2);
+  background: rgba(24, 144, 255, 0.05);
 }
 
 .tool-call-item::before {
   content: '';
   position: absolute;
-  left: -6px;
-  top: 12px;
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
   background: #1890ff;
-  border: 2px solid white;
-  box-shadow: 0 0 0 1px #e8e8e8;
+  border-radius: 3px 0 0 3px;
 }
 
 .text-response-item {
@@ -991,24 +1014,31 @@ onMounted(() => {
 .step-indicator {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 0;
+  gap: 10px;
+  padding: 0;
   cursor: pointer;
   transition: all 0.2s;
   border-radius: 4px;
+  min-height: 32px;
 }
 
 .step-indicator:hover {
-  background: rgba(24, 144, 255, 0.05);
-  padding: 8px 12px;
-  margin: 0 -12px;
+  background: rgba(24, 144, 255, 0.08);
+  padding: 4px 8px;
+  margin: -4px -8px;
 }
 
 .step-icon {
-  font-size: 14px;
-  width: 20px;
-  text-align: center;
+  font-size: 16px;
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(24, 144, 255, 0.1);
+  border-radius: 4px;
   color: #1890ff;
+  flex-shrink: 0;
 }
 
 .step-name {
@@ -1020,11 +1050,12 @@ onMounted(() => {
 
 .step-status {
   font-size: 11px;
-  padding: 2px 6px;
-  border-radius: 3px;
+  padding: 3px 8px;
+  border-radius: 10px;
   font-weight: 500;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.3px;
+  flex-shrink: 0;
 }
 
 .status-calling {
@@ -1068,13 +1099,16 @@ onMounted(() => {
 }
 
 .expand-btn {
-  opacity: 0.6;
-  transition: opacity 0.2s;
+  opacity: 0.7;
+  transition: all 0.2s;
   font-size: 12px;
+  color: #666;
+  flex-shrink: 0;
 }
 
 .step-indicator:hover .expand-btn {
   opacity: 1;
+  color: #1890ff;
 }
 
 .step-details {

@@ -51,14 +51,40 @@ const userStore = useUserStore()
 const messagesContainer = ref(null)
 const isLastMessageStreaming = ref(false)
 
-// 滚动到底部
-const scrollToBottom = () => {
+// 检查用户是否在底部附近（容差20px）
+const isNearBottom = () => {
+  if (!messagesContainer.value) return true // 容器不存在时默认认为在底部
+  const container = messagesContainer.value
+  const threshold = 20
+
+  // 如果内容高度小于等于容器高度，说明没有滚动条，认为在底部
+  if (container.scrollHeight <= container.clientHeight) {
+    return true
+  }
+
+  return container.scrollTop + container.clientHeight >= container.scrollHeight - threshold
+}
+
+// 智能滚动到底部（只有在用户在底部时才滚动）
+const scrollToBottom = (force = false) => {
   nextTick(() => {
-    if (messagesContainer.value) {
+    if (messagesContainer.value && (force || isNearBottom())) {
       messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight
     }
   })
 }
+
+// 监听会话ID变化，切换会话时滚动到底部
+watch(() => sessionStore.sessionId, (newSessionId, oldSessionId) => {
+  if (newSessionId && newSessionId !== oldSessionId) {
+    // 会话切换时，等待消息加载完成后滚动到底部
+    nextTick(() => {
+      setTimeout(() => {
+        scrollToBottom(true)
+      }, 100) // 给消息加载一点时间
+    })
+  }
+})
 
 // 组件挂载时的操作
 onMounted(() => {
@@ -68,23 +94,39 @@ onMounted(() => {
     router.push('/login')
     return
   }
-  
+
   // 检查是否选择了会话
   if (!sessionStore.sessionId) {
     // 如果没有选择会话，不执行任何操作，让父组件显示欢迎页面
     return
   }
-  
-  scrollToBottom()
+
+  // 初始加载时，等待DOM渲染完成后滚动
+  nextTick(() => {
+    setTimeout(() => {
+      scrollToBottom(true)
+    }, 200) // 给消息渲染更多时间
+  })
 })
 
-// 监听消息变化，自动滚动到底部
-watch(() => sessionStore.messages, () => {
-  scrollToBottom()
-}, { deep: true })
+// 监听消息数量变化（新消息时才滚动）
+watch(() => sessionStore.messages.length, (newLength, oldLength) => {
+  // 只有当消息数量增加时才自动滚动（新消息）
+  if (newLength > oldLength) {
+    scrollToBottom()
+  }
+  // 如果是从0到有消息（加载历史消息），强制滚动到底部
+  else if (oldLength === 0 && newLength > 0) {
+    scrollToBottom(true)
+  }
+})
 
-// 监听消息内容变化，特别是流式输出时
-watch(() => sessionStore.messages.map(m => m?.content || '').join(''), () => {
+// 监听消息内容变化，特别是流式输出时（只监听最后一条消息的内容）
+watch(() => {
+  const lastMessage = sessionStore.messages[sessionStore.messages.length - 1]
+  return lastMessage?.content || ''
+}, () => {
+  // 流式输出时滚动到底部
   scrollToBottom()
 })
 
@@ -107,7 +149,7 @@ const sendMessageAndGetReply = async (messageContent) => {
     // 添加用户消息
     const userMessage = createMessage('user', messageContent)
     sessionStore.addMessage(userMessage)
-    scrollToBottom()
+    scrollToBottom(true) // 发送消息时强制滚动
 
     // 发送消息到后端获取AI回复
     const response = await messageAPI.send(sessionStore.sessionId, {
@@ -118,7 +160,7 @@ const sendMessageAndGetReply = async (messageContent) => {
     if (response && response.response) {
       const assistantMessage = createMessage('assistant', response.response)
       sessionStore.addMessage(assistantMessage)
-      scrollToBottom()
+      scrollToBottom(true) // 收到回复时强制滚动
     }
   } catch (error) {
     console.error('发送消息失败:', error)
