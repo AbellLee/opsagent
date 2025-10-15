@@ -177,11 +177,9 @@ const sendBlockingMessage = async (messageContent) => {
   })
 
   // 处理结构化消息数据
-  if (response.messages && response.messages.length > 0) {
-    // 如果有结构化消息数据，添加所有消息
-    response.messages.forEach(message => {
-      sessionStore.addMessage(message)
-    })
+  if (response.response && typeof response.response === 'object') {
+    // 新格式：response是完整的消息对象
+    sessionStore.addMessage(response.response)
   } else {
     // 兼容旧格式：创建并添加助手消息
     const assistantMessage = createMessage(MESSAGE_TYPES.ASSISTANT, response.response)

@@ -2,7 +2,7 @@
 Agent服务相关的数据模型
 """
 from pydantic import BaseModel, Field
-from typing import List, Optional, Dict, Any, Literal
+from typing import List, Optional, Dict, Any, Literal, Union
 
 
 class AgentExecuteRequest(BaseModel):
@@ -26,7 +26,7 @@ class AgentChatRequest(BaseModel):
 class ChatCompletionResponse(BaseModel):
     """阻塞模式的响应模型"""
     session_id: str
-    response: str
+    response: Union[str, Dict[str, Any]]  # 支持字符串或消息对象
     status: str
     created_at: float
     model: str

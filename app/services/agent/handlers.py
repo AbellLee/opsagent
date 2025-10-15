@@ -4,6 +4,8 @@ Agent服务的核心业务逻辑处理
 from typing import Dict, Any
 from uuid import UUID
 import time
+import uuid
+from datetime import datetime
 from fastapi.responses import StreamingResponse
 from langchain_core.messages import HumanMessage, AIMessage, ToolMessage
 from langgraph.checkpoint.postgres import PostgresSaver
@@ -73,33 +75,27 @@ async def handle_blocking_chat(session_id: UUID, inputs: Dict[str, Any], config:
         # 合并工具相关消息
         merged_messages = merge_tool_messages(messages)
 
-        # 提取最后的回复内容（用于兼容性）
-        response_content = "抱歉，没有收到回复。"
-
-        # 从合并后的消息中获取最后的回复
+        # 获取最后的AI助手消息作为response
+        response_message = None
         for message in reversed(merged_messages):
             if message.get("type") == "assistant":
-                content = message.get("content")
-                if isinstance(content, list):
-                    # 新格式：从序列中提取所有文本内容
-                    text_parts = []
-                    for item in content:
-                        if item.get("type") == "text" and item.get("content"):
-                            text_parts.append(item.get("content"))
-                    if text_parts:
-                        response_content = "\n\n".join(text_parts)
-                        break
-                elif isinstance(content, str) and content:
-                    # 兼容旧格式：直接使用字符串内容
-                    response_content = content
-                    break
-            elif message.get("type") == "tool_operation" and message.get("content"):
-                response_content = message.get("content")
+                response_message = message
                 break
-        logger.info(f"最后的回复内容: {response_content}")
+
+        if not response_message:
+            # 如果没有找到AI消息，创建一个默认的
+            response_message = {
+                "id": str(uuid.uuid4()),
+                "type": "assistant",
+                "role": "assistant",
+                "content": "抱歉，没有收到回复。",
+                "timestamp": datetime.now().isoformat(),
+                "sender": "AI助手"
+            }
+
         return ChatCompletionResponse(
             session_id=str(session_id),
-            response=response_content,
+            response=response_message,  # 返回完整的消息对象
             status="success",
             created_at=time.time(),
             model="tongyi"
