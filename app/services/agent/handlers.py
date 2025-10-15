@@ -102,8 +102,7 @@ async def handle_blocking_chat(session_id: UUID, inputs: Dict[str, Any], config:
             response=response_content,
             status="success",
             created_at=time.time(),
-            model="tongyi",
-            messages=merged_messages  # 返回结构化的消息数据
+            model="tongyi"
         )
 
 

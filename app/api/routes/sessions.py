@@ -260,7 +260,7 @@ def merge_tool_messages(messages):
                 "sender": "AI助手"
             }
 
-            # 按顺序处理AI执行流程
+            # 简单按顺序处理每个消息
             j = i
             while j < len(messages):
                 current_msg = messages[j]
@@ -270,9 +270,20 @@ def merge_tool_messages(messages):
                     j += 1
                     continue
 
-                # 处理AI消息（可能包含工具调用）
-                if current_formatted.get("type") == "assistant" or current_formatted.get("type") == "tool_call":
-                    # 如果有工具调用，添加工具调用
+                # 处理AI消息 - 按正确的执行顺序：先文本，后工具调用
+                if current_formatted.get("type") == "tool_call" or current_formatted.get("type") == "assistant":
+                    # 先添加文本内容（如果有）- 这是AI的分析或开始语句
+                    ai_content = current_formatted.get("content", "")
+                    if ai_content.strip():
+                        text_entry = {
+                            "type": "text",
+                            "content": ai_content,
+                            "status": "completed"
+                        }
+                        ai_message["content"].append(text_entry)
+
+
+                    # 然后添加工具调用（如果有）- 这是AI要执行的操作
                     tool_calls = current_formatted.get("tool_calls", [])
                     for tool_call in tool_calls:
                         tool_call_entry = {
@@ -285,18 +296,6 @@ def merge_tool_messages(messages):
                             "expanded": False
                         }
                         ai_message["content"].append(tool_call_entry)
-                        logger.info(f"添加工具调用: {tool_call.get('name', '')}")
-
-                    # 如果有文本内容，添加文本
-                    ai_content = current_formatted.get("content", "")
-                    if ai_content.strip():
-                        text_entry = {
-                            "type": "text",
-                            "content": ai_content,
-                            "status": "completed"
-                        }
-                        ai_message["content"].append(text_entry)
-                        logger.info(f"添加文本内容: {ai_content[:50]}...")
 
                     j += 1
 
@@ -311,7 +310,7 @@ def merge_tool_messages(messages):
                             content_item.get("id") == tool_call_id):
                             content_item["status"] = "completed"
                             content_item["result"] = tool_result
-                            logger.info(f"更新工具结果: {content_item.get('name', '')}")
+
                             break
                     j += 1
 
@@ -320,9 +319,6 @@ def merge_tool_messages(messages):
                     break
 
             formatted_messages.append(ai_message)
-            tool_call_count = len([item for item in ai_message['content'] if item.get('type') == 'tool_call'])
-            text_count = len([item for item in ai_message['content'] if item.get('type') == 'text'])
-            logger.info(f"AI消息构建完成，包含 {tool_call_count} 个工具调用，{text_count} 段文本，总序列长度: {len(ai_message['content'])}")
             i = j
 
         else:
