@@ -31,11 +31,13 @@ class MCPConfigService:
         """创建MCP服务器配置"""
         conn = None
         try:
+            logger.info(f"开始创建MCP配置: {config_data.name}")
             conn = self._get_connection()
             cursor = conn.cursor()
 
             config_id = uuid4()
             now = datetime.now(timezone.utc)
+            logger.info(f"生成配置ID: {config_id}, 时间: {now}")
 
             cursor.execute("""
                 INSERT INTO mcp_server_configs (id, name, description, config, enabled, created_at, updated_at)

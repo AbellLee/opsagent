@@ -51,7 +51,7 @@
           <n-input v-model:value="formData.description" placeholder="输入配置描述（可选）" />
         </n-form-item>
 
-        <n-form-item label="配置JSON" path="config">
+        <n-form-item label="配置JSON" path="configJson">
           <n-space vertical>
             <n-space>
               <n-button size="small" @click="fillExample('stdio')">填入stdio示例</n-button>
@@ -154,7 +154,7 @@ const formRules = {
     { required: true, message: '请输入配置名称', trigger: 'blur' },
     { min: 1, max: 100, message: '名称长度应在1-100字符之间', trigger: 'blur' }
   ],
-  config: [
+  configJson: [
     { required: true, message: '请输入配置JSON', trigger: 'blur', validator: validateConfigJson }
   ]
 }
@@ -204,7 +204,7 @@ const columns = [
             type: 'primary',
             ghost: true,
             onClick: () => editConfig(row)
-          }, { default: () => h(NIcon, null, { default: () => h(Edit) }) }),
+          }, { default: () => '编辑' }),
           h(NPopconfirm, {
             onPositiveClick: () => deleteConfig(row.id)
           }, {
@@ -212,7 +212,7 @@ const columns = [
               size: 'small',
               type: 'error',
               ghost: true
-            }, { default: () => h(NIcon, null, { default: () => h(Trash) }) }),
+            }, { default: () => '删除' }),
             default: () => '确定删除这个配置吗？'
           })
         ]
@@ -311,6 +311,8 @@ const handleSubmit = async () => {
       enabled: formData.enabled,
       config: JSON.parse(formData.configJson)
     }
+
+    console.log('提交的配置数据:', configData)
     
     if (editingConfig.value) {
       await mcpConfigAPI.update(editingConfig.value.id, configData)

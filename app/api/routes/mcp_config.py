@@ -27,9 +27,12 @@ def create_mcp_config(
 ):
     """创建MCP服务器配置"""
     try:
+        logger.info(f"收到创建MCP配置请求: name={config_data.name}, config={config_data.config}")
+
         # 验证配置格式
         _validate_mcp_config(config_data.config)
-        
+        logger.info("MCP配置格式验证通过")
+
         config = mcp_config_service.create_mcp_config(config_data)
         logger.info(f"创建MCP配置成功: {config.name}")
         return config
