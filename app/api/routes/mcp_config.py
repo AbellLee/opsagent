@@ -237,6 +237,28 @@ def _validate_mcp_config(config: Dict[str, Any]) -> None:
         logger.info(f"检测到自定义协议类型: {protocol_type}，跳过详细验证")
 
 
+@router.post("/test")
+async def test_mcp_config(db = Depends(get_db)):
+    """测试MCP配置有效性"""
+    try:
+        from app.agent.tools.mcp_tools import mcp_tool_manager
+
+        logger.info("收到MCP配置测试请求")
+        result = await mcp_tool_manager.test_config_validity()
+
+        return {
+            "success": len(result["errors"]) == 0,
+            "message": "配置测试完成",
+            "details": result
+        }
+
+    except Exception as e:
+        logger.error(f"测试MCP配置失败: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"测试MCP配置失败: {str(e)}"
+        )
+
 @router.post("/reload")
 async def reload_mcp_tools(db = Depends(get_db)):
     """重新加载MCP工具（热重载，无需重启应用）"""
