@@ -1,6 +1,7 @@
 from fastapi import Depends, HTTPException, status
 from typing import Generator
 import psycopg2
+import psycopg2.extras
 from app.core.config import settings
 from app.core.logger import logger
 
@@ -12,6 +13,8 @@ def get_db() -> Generator:
         # logger.info(f"当前数据库配置URL: {settings.database_url}")
         # logger.info(f"尝试连接数据库...")
         conn = psycopg2.connect(settings.database_url)
+        # 注册UUID适配器
+        psycopg2.extras.register_uuid(conn_or_curs=conn)
         # logger.info("数据库连接成功")
         yield conn
     except Exception as e:

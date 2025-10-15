@@ -85,6 +85,38 @@
         </div>
       </template>
     </n-modal>
+
+    <!-- 设置弹窗 -->
+    <n-modal v-model:show="showSettingsModal" preset="card" title="设置" style="width: 900px; height: 600px;">
+      <div class="settings-container">
+        <!-- 左侧导航 -->
+        <div class="settings-sidebar">
+          <div
+            class="settings-nav-item"
+            :class="{ active: activeSettingsTab === 'mcp' }"
+            @click="activeSettingsTab = 'mcp'"
+          >
+            MCP配置
+          </div>
+          <div
+            class="settings-nav-item"
+            :class="{ active: activeSettingsTab === 'other' }"
+            @click="activeSettingsTab = 'other'"
+          >
+            其他配置
+          </div>
+        </div>
+
+        <!-- 右侧内容 -->
+        <div class="settings-content">
+          <MCPConfigPanel v-if="activeSettingsTab === 'mcp'" />
+          <div v-else-if="activeSettingsTab === 'other'" class="other-settings">
+            <n-result status="info" title="其他设置" description="功能开发中...">
+            </n-result>
+          </div>
+        </div>
+      </div>
+    </n-modal>
   </div>
 </template>
 
@@ -106,6 +138,7 @@ import {
   NResult,
   NButton
 } from 'naive-ui'
+import MCPConfigPanel from './MCPConfigPanel.vue'
 import { createDiscreteApi } from 'naive-ui'
 import {
   Person,
@@ -225,10 +258,13 @@ const editUserProfile = () => {
   message.info('编辑功能开发中...')
 }
 
+// 设置相关状态
+const showSettingsModal = ref(false)
+const activeSettingsTab = ref('mcp')
+
 // 显示设置
 const showSettings = () => {
-  message.info('设置功能开发中...')
-  // 这里可以打开设置模态框或跳转到设置页面
+  showSettingsModal.value = true
 }
 
 // 格式化时间
@@ -381,5 +417,51 @@ html.dark .profile-avatar {
 
 html.dark .profile-footer {
   border-top-color: rgba(255, 255, 255, 0.1);
+}
+
+/* 设置弹窗样式 */
+.settings-container {
+  display: flex;
+  height: 500px;
+}
+
+.settings-sidebar {
+  width: 150px;
+  border-right: 1px solid var(--border-color);
+  padding: 16px 0;
+}
+
+.settings-nav-item {
+  padding: 12px 20px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  border-radius: 8px;
+  margin: 0 8px 4px 8px;
+  color: var(--text-color-2);
+}
+
+.settings-nav-item:hover {
+  background-color: var(--hover-color);
+  color: var(--text-color-1);
+}
+
+.settings-nav-item.active {
+  background-color: var(--primary-color);
+  color: white;
+}
+
+.settings-content {
+  flex: 1;
+  overflow: hidden;
+}
+
+.other-settings {
+  padding: 40px;
+  text-align: center;
+}
+
+/* 暗色模式 */
+html.dark .settings-sidebar {
+  border-right-color: rgba(255, 255, 255, 0.1);
 }
 </style>

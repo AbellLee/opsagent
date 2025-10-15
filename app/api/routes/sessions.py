@@ -63,8 +63,8 @@ def get_session(session_id: UUID, db = Depends(get_db)):
             )
             
         return Session(
-            session_id=UUID(row[0]),
-            user_id=UUID(row[1]),
+            session_id=row[0] if isinstance(row[0], UUID) else UUID(row[0]),
+            user_id=row[1] if isinstance(row[1], UUID) else UUID(row[1]),
             session_name=row[2],
             created_at=row[3],
             expires_at=row[4]
@@ -163,8 +163,8 @@ def list_sessions(user_id: UUID = Query(...), db = Depends(get_db)):
         sessions = []
         for row in rows:
             sessions.append(Session(
-                session_id=UUID(row[0]),
-                user_id=UUID(row[1]),
+                session_id=row[0] if isinstance(row[0], UUID) else UUID(row[0]),
+                user_id=row[1] if isinstance(row[1], UUID) else UUID(row[1]),
                 session_name=row[2],
                 created_at=row[3],
                 expires_at=row[4]

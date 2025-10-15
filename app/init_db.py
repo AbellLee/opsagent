@@ -42,7 +42,10 @@ def create_tables():
         # 连接数据库
         conn = psycopg2.connect(settings.database_url)
         cursor = conn.cursor()
-        
+
+        # 启用UUID扩展
+        cursor.execute("CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\"")
+
         # 创建用户表
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS users (
@@ -78,6 +81,19 @@ def create_tables():
                 created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 UNIQUE(user_id, tool_id)
+            )
+        """)
+
+        # 创建MCP服务器配置表
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS mcp_server_configs (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                name VARCHAR(100) UNIQUE NOT NULL,
+                description TEXT,
+                config JSONB NOT NULL,
+                enabled BOOLEAN NOT NULL DEFAULT TRUE,
+                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
             )
         """)
         

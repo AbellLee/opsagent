@@ -144,3 +144,15 @@ export const approvalAPI = {
   approve: (approvalId) => apiClient.post(`/approvals/${approvalId}/approve`),
   reject: (approvalId) => apiClient.post(`/approvals/${approvalId}/reject`)
 }
+
+// MCP配置相关 API
+export const mcpConfigAPI = {
+  list: (enabledOnly = false) => apiClient.get(`/mcp-configs${enabledOnly ? '?enabled_only=true' : ''}`),
+  create: (configData) => apiClient.post('/mcp-configs', configData),
+  get: (configId) => apiClient.get(`/mcp-configs/${configId}`),
+  update: (configId, configData) => apiClient.put(`/mcp-configs/${configId}`, configData),
+  delete: (configId) => apiClient.delete(`/mcp-configs/${configId}`),
+  toggle: (configId) => apiClient.post(`/mcp-configs/${configId}/toggle`),
+  validate: (configData) => apiClient.post('/mcp-configs/validate', configData),
+  reload: () => apiClient.post('/mcp-configs/reload')
+}

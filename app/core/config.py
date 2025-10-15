@@ -37,3 +37,7 @@ class Settings(BaseSettings):
 
 # 全局配置实例
 settings = Settings()
+
+def get_settings():
+    """获取配置实例"""
+    return settings

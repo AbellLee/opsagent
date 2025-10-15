@@ -12,7 +12,22 @@ router = APIRouter(prefix="/api/tools", tags=["tools"])
 def list_tools(db = Depends(get_db)):
     """列出所有可用工具"""
     try:
-        tools = tool_manager.list_tools()
+        tools_data = tool_manager.list_tools()
+        # 转换为Tool模型格式
+        tools = []
+        for tool_data in tools_data:
+            # 生成基于工具名称的确定性UUID
+            import hashlib
+            tool_name_hash = hashlib.md5(tool_data["name"].encode()).hexdigest()
+            # 将MD5哈希转换为有效的UUID格式
+            tool_uuid = UUID(tool_name_hash[:8] + '-' + tool_name_hash[8:12] + '-' + tool_name_hash[12:16] + '-' + tool_name_hash[16:20] + '-' + tool_name_hash[20:32])
+
+            tools.append(Tool(
+                tool_id=tool_uuid,
+                name=tool_data["name"],
+                description=tool_data["description"],
+                type=tool_data.get("type", "Custom")
+            ))
         return tools
     except Exception as e:
         raise HTTPException(
