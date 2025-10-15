@@ -116,48 +116,27 @@ async def handle_streaming_chat(session_id: UUID, inputs: Dict[str, Any], config
             # 创建graph实例
             graph = create_graph(checkpointer=checkpointer, store=store)
             
-            # 使用异步方式处理graph.stream，按实际顺序传输各种类型的消息
+            # 回到messages模式，但改进工具调用处理逻辑
             # 重要：不要中途break，让LangGraph完整执行以确保状态正确保存
             try:
                 stream_finished = False
+                pending_tool_calls = {}  # 存储待完成的工具调用
+                message_count = 0
+
                 for chunk, _ in graph.stream(inputs, config, stream_mode="messages"):
+                    message_count += 1
 
                     # 处理AIMessage - 包括普通回复和工具调用
                     if isinstance(chunk, AIMessage):
                         # 检查是否包含工具调用
                         tool_calls = getattr(chunk, 'tool_calls', [])
+                        ai_content = getattr(chunk, 'content', '')
 
-                        if tool_calls:
-                            # 调试：打印原始工具调用数据
-                            logger.info(f"原始工具调用数据: {tool_calls}")
-                            for i, tool_call in enumerate(tool_calls):
-                                logger.info(f"工具调用 {i}: {tool_call}")
-                                logger.info(f"工具调用类型: {type(tool_call)}")
-                                if hasattr(tool_call, '__dict__'):
-                                    logger.info(f"工具调用属性: {tool_call.__dict__}")
-
-                            # 发送工具调用消息
+                        # 先发送AI的文本内容（如果有）
+                        if ai_content and ai_content.strip():
                             chunk_response = ChunkChatCompletionResponse(
                                 session_id=str(session_id),
-                                chunk=getattr(chunk, 'content', ''),
-                                status="streaming",
-                                created_at=time.time(),
-                                model="tongyi",
-                                is_final=False,
-                                message_type="tool_call",
-                                tool_calls=tool_calls
-                            )
-
-                            # 调试：打印序列化后的数据
-                            json_data = chunk_response.model_dump_json()
-                            logger.info(f"序列化后的工具调用数据: {json_data}")
-                            yield f"data: {json_data}\n\n"
-
-                        elif hasattr(chunk, 'content') and chunk.content:
-                            # 发送普通AI回复消息
-                            chunk_response = ChunkChatCompletionResponse(
-                                session_id=str(session_id),
-                                chunk=chunk.content,
+                                chunk=ai_content,
                                 status="streaming",
                                 created_at=time.time(),
                                 model="tongyi",
@@ -166,36 +145,97 @@ async def handle_streaming_chat(session_id: UUID, inputs: Dict[str, Any], config
                             )
                             yield f"data: {chunk_response.model_dump_json()}\n\n"
 
-                        # 检查是否是结束信号，但不要break，让图完整执行
-                        if hasattr(chunk, 'response_metadata') and chunk.response_metadata.get('finish_reason') == 'stop':
-                            # 标记流已结束，但继续让图执行完毕
-                            if not stream_finished:
-                                stream_finished = True
-                                final_response = ChunkChatCompletionResponse(
-                                    session_id=str(session_id),
-                                    chunk="",
-                                    status="completed",
-                                    created_at=time.time(),
-                                    model="tongyi",
-                                    is_final=True,
-                                    message_type="assistant"
-                                )
-                                yield f"data: {final_response.model_dump_json()}\n\n"
+                        # 如果有工具调用，立即发送工具调用信息（不等待结果）
+                        if tool_calls:
+                            for tool_call in tool_calls:
+                                # 尝试多种方式获取工具调用信息
+                                tool_name = ''
+                                tool_id = ''
+                                tool_args = {}
+
+                                # 方式1：直接属性访问
+                                if hasattr(tool_call, 'name'):
+                                    tool_name = getattr(tool_call, 'name', '') or ''
+                                if hasattr(tool_call, 'id'):
+                                    tool_id = getattr(tool_call, 'id', '') or ''
+                                if hasattr(tool_call, 'args'):
+                                    tool_args = getattr(tool_call, 'args', {}) or {}
+
+                                # 方式2：字典访问（如果tool_call是字典）
+                                if isinstance(tool_call, dict):
+                                    tool_name = tool_call.get('name', '') or tool_name
+                                    tool_id = tool_call.get('id', '') or tool_id
+                                    tool_args = tool_call.get('args', {}) or tool_args
+
+                                # 方式3：检查function属性（某些LLM返回格式）
+                                if hasattr(tool_call, 'function'):
+                                    func = getattr(tool_call, 'function', {})
+                                    if hasattr(func, 'name'):
+                                        tool_name = getattr(func, 'name', '') or tool_name
+                                    if hasattr(func, 'arguments'):
+                                        import json
+                                        try:
+                                            tool_args = json.loads(getattr(func, 'arguments', '{}')) or tool_args
+                                        except:
+                                            pass
+
+                                if tool_name.strip() and tool_id.strip():
+                                    # 立即发送工具调用信息（状态为calling）
+                                    tool_call_info = {
+                                        "id": tool_id,
+                                        "name": tool_name,
+                                        "args": tool_args,
+                                        "type": "tool_call",
+                                        "result": None,
+                                        "status": "calling"
+                                    }
+
+                                    chunk_response = ChunkChatCompletionResponse(
+                                        session_id=str(session_id),
+                                        chunk="",
+                                        status="streaming",
+                                        created_at=time.time(),
+                                        model="tongyi",
+                                        is_final=False,
+                                        message_type="tool_call",
+                                        tool_calls=[tool_call_info]
+                                    )
+                                    yield f"data: {chunk_response.model_dump_json()}\n\n"
+
+                                    # 存储工具调用，等待结果更新
+                                    pending_tool_calls[tool_id] = tool_call_info
 
                     # 处理ToolMessage - 工具执行结果
                     elif isinstance(chunk, ToolMessage):
-                        chunk_response = ChunkChatCompletionResponse(
-                            session_id=str(session_id),
-                            chunk=getattr(chunk, 'content', ''),
-                            status="streaming",
-                            created_at=time.time(),
-                            model="tongyi",
-                            is_final=False,
-                            message_type="tool_result",
-                            tool_name=getattr(chunk, 'name', ''),
-                            tool_call_id=getattr(chunk, 'tool_call_id', '')
-                        )
-                        yield f"data: {chunk_response.model_dump_json()}\n\n"
+                        tool_call_id = getattr(chunk, 'tool_call_id', '')
+                        tool_result = getattr(chunk, 'content', '')
+
+                        # 如果找到对应的工具调用，发送更新后的工具调用信息
+                        if tool_call_id in pending_tool_calls:
+                            tool_call_info = pending_tool_calls[tool_call_id]
+                            tool_call_info["result"] = tool_result
+                            tool_call_info["status"] = "completed"
+
+                            # 发送更新后的工具调用信息
+                            chunk_response = ChunkChatCompletionResponse(
+                                session_id=str(session_id),
+                                chunk="",
+                                status="streaming",
+                                created_at=time.time(),
+                                model="tongyi",
+                                is_final=False,
+                                message_type="tool_result",
+                                tool_call_id=tool_call_id,
+                                tool_name=tool_call_info["name"],
+                                tool_calls=None
+                            )
+                            chunk_response.chunk = tool_result  # 设置结果内容
+                            yield f"data: {chunk_response.model_dump_json()}\n\n"
+
+                            # 移除已完成的工具调用
+                            del pending_tool_calls[tool_call_id]
+
+                logger.info(f"消息处理完成，总共处理了 {message_count} 条消息")
 
                 # 图执行完毕后，如果还没有发送结束信号，则发送
                 if not stream_finished:

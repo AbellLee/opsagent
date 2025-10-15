@@ -286,16 +286,19 @@ const sendStreamingMessage = async (messageContent) => {
                       // 添加工具调用到内容序列中
                       if (chunkData.tool_calls) {
                         chunkData.tool_calls.forEach(toolCall => {
-                          const toolCallEntry = {
-                            type: 'tool_call',
-                            id: toolCall.id || '',
-                            name: toolCall.name || '',
-                            args: toolCall.args || {},
-                            result: null,
-                            status: 'calling',
-                            expanded: false
+                          // 只处理有效的工具调用（name不为空）
+                          if (toolCall.name && toolCall.name.trim()) {
+                            const toolCallEntry = {
+                              type: 'tool_call',
+                              id: toolCall.id || '',
+                              name: toolCall.name,
+                              args: toolCall.args || {},
+                              result: null,
+                              status: 'calling',
+                              expanded: false
+                            }
+                            currentAIMessage.content.push(toolCallEntry)
                           }
-                          currentAIMessage.content.push(toolCallEntry)
                         })
                         // 更新消息
                         sessionStore.messages[currentMessageIndex] = { ...currentAIMessage }
