@@ -115,13 +115,35 @@ class MCPToolWrapper:
                 self.mcp_client = None
                 return []
             except Exception as tool_error:
+                error_str = str(tool_error)
+
+                # 特别处理连接错误
+                if "ConnectError" in error_str or "All connection attempts failed" in error_str:
+                    logger.error("❌ MCP服务器连接失败")
+                    logger.error(f"无法连接到MCP服务器，请检查：")
+                    for name, config in self.mcp_servers_config.items():
+                        if config.get("transport") == "sse":
+                            logger.error(f"  - SSE服务器 '{name}': {config.get('url')}")
+                        elif config.get("transport") == "streamable_http":
+                            logger.error(f"  - HTTP服务器 '{name}': {config.get('url')}")
+                        elif config.get("transport") == "stdio":
+                            logger.error(f"  - Stdio服务器 '{name}': {config.get('command')}")
+                    logger.error("请确保MCP服务器已启动并且网络连接正常")
+                    self.mcp_client = None
+                    return []
+
                 # 特别处理TaskGroup错误
-                if "TaskGroup" in str(tool_error) or "unhandled errors" in str(tool_error):
+                if "TaskGroup" in error_str or "unhandled errors" in error_str:
                     logger.error("检测到TaskGroup错误，这可能是MCP服务器连接问题")
                     logger.error("建议检查MCP服务器配置和服务器状态")
                     # 尝试重置客户端
                     self.mcp_client = None
-                raise tool_error
+                    return []
+
+                # 其他错误
+                logger.error(f"获取MCP工具时发生未知错误: {tool_error}")
+                self.mcp_client = None
+                return []
 
             # 缓存工具
             for tool in tools:
@@ -136,6 +158,7 @@ class MCPToolWrapper:
             logger.error(f"错误类型: {type(e).__name__}")
             import traceback
             logger.error(f"详细错误信息: {traceback.format_exc()}")
+            logger.warning("将继续运行，但MCP工具不可用")
             return []
 
     def get_mcp_tool(self, tool_name: str) -> Optional[BaseTool]:

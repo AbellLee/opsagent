@@ -5,6 +5,7 @@ MCP服务器配置管理API路由
 from fastapi import APIRouter, HTTPException, status, Depends
 from typing import List, Dict, Any
 from uuid import UUID
+from datetime import datetime
 
 from app.models.schemas import (
     MCPServerConfig, 
@@ -257,6 +258,88 @@ async def test_mcp_config(db = Depends(get_db)):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"测试MCP配置失败: {str(e)}"
+        )
+
+@router.post("/diagnose")
+async def diagnose_mcp_connection(db = Depends(get_db)):
+    """诊断MCP服务器连接状态"""
+    try:
+        import httpx
+        from app.services.mcp import mcp_config_service
+
+        logger.info("收到MCP连接诊断请求")
+
+        # 获取所有启用的配置
+        configs = mcp_config_service.list_mcp_configs(enabled_only=True)
+
+        diagnosis = {
+            "timestamp": datetime.now().isoformat(),
+            "total_configs": len(configs),
+            "servers": []
+        }
+
+        # 测试每个服务器的连接
+        for config in configs:
+            server_info = {
+                "name": config.name,
+                "transport": config.config.get("transport"),
+                "status": "unknown",
+                "error": None
+            }
+
+            try:
+                transport = config.config.get("transport")
+
+                if transport == "sse" or transport == "streamable_http":
+                    url = config.config.get("url")
+                    if url:
+                        server_info["url"] = url
+                        # 尝试连接
+                        async with httpx.AsyncClient(timeout=5.0) as client:
+                            try:
+                                response = await client.head(url)
+                                server_info["status"] = "reachable"
+                                server_info["http_status"] = response.status_code
+                            except httpx.ConnectError as e:
+                                server_info["status"] = "unreachable"
+                                server_info["error"] = f"连接失败: {str(e)}"
+                            except httpx.TimeoutException:
+                                server_info["status"] = "timeout"
+                                server_info["error"] = "连接超时（5秒）"
+                            except Exception as e:
+                                server_info["status"] = "error"
+                                server_info["error"] = str(e)
+
+                elif transport == "stdio":
+                    command = config.config.get("command")
+                    if command:
+                        server_info["command"] = command
+                        # 检查命令是否存在
+                        import shutil
+                        if shutil.which(command):
+                            server_info["status"] = "command_found"
+                        else:
+                            server_info["status"] = "command_not_found"
+                            server_info["error"] = f"命令未找到: {command}"
+
+                else:
+                    server_info["status"] = "unknown_transport"
+                    server_info["error"] = f"未知的传输类型: {transport}"
+
+            except Exception as e:
+                server_info["status"] = "error"
+                server_info["error"] = str(e)
+
+            diagnosis["servers"].append(server_info)
+
+        logger.info(f"MCP连接诊断完成: {diagnosis}")
+        return diagnosis
+
+    except Exception as e:
+        logger.error(f"MCP连接诊断失败: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"诊断失败: {str(e)}"
         )
 
 @router.post("/reload")
