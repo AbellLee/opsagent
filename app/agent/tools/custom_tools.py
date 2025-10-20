@@ -4,6 +4,9 @@ from app.core.logger import logger
 from uuid import uuid4, UUID
 import json
 from datetime import datetime
+from enum import Enum
+import hashlib
+import base64
 
 # 数据库连接
 from app.core.config import get_settings
@@ -16,14 +19,22 @@ from app.core.user_context import get_user_id, get_session_id
 settings = get_settings()
 
 
+class TaskStatus(str, Enum):
+    """任务状态枚举"""
+    PENDING = "PENDING"
+    IN_PROGRESS = "IN_PROGRESS"
+    COMPLETE = "COMPLETE"
+    CANCELLED = "CANCELLED"
+    ERROR = "ERROR"
+
+
 # 注册自定义工具
 def get_custom_tools() -> list:
     """获取所有自定义工具"""
     return [
         add_tasks,
         update_tasks,
-        get_tasks,
-        delete_tasks
+        get_tasks
     ]
 
 
@@ -44,6 +55,25 @@ def _check_session_exists(cursor, session_id: str, user_id: str) -> bool:
     return cursor.fetchone() is not None
 
 
+def _validate_task_status(status: str) -> bool:
+    """验证任务状态是否有效"""
+    try:
+        TaskStatus(status)
+        return True
+    except ValueError:
+        return False
+
+
+def _generate_short_id() -> str:
+    """生成缩短的ID"""
+    # 生成UUID并转换为8位短ID
+    full_uuid = str(uuid4())
+    # 使用MD5哈希然后取前8位
+    hash_obj = hashlib.md5(full_uuid.encode())
+    short_id = hash_obj.hexdigest()[:8]
+    return short_id
+
+
 @tool
 def add_tasks(tasks: List[Dict[str, Any]]) -> Dict[str, Any]:
     """添加一个或多个新任务到任务列表中。
@@ -54,7 +84,7 @@ def add_tasks(tasks: List[Dict[str, Any]]) -> Dict[str, Any]:
 
     Args:
         tasks: 任务列表，每个任务包含以下可能的字段：
-            - id: 任务唯一标识符（可选，如果不提供会自动生成）
+            - id: 任务唯一标识符（可选，如果不提供会自动生成8位短ID）
             - content: 任务内容
             - status: 任务状态 (PENDING, IN_PROGRESS, COMPLETE, CANCELLED, ERROR)
             - parent_task_id: 父任务ID（可选，用于创建子任务）
@@ -67,12 +97,12 @@ def add_tasks(tasks: List[Dict[str, Any]]) -> Dict[str, Any]:
         user_id = get_user_id()
         session_id = get_session_id()
         
-        # 如果没有从上下文获取到，则使用默认值（仅用于测试）
+        # 如果没有从上下文获取到，则返回错误
         if not user_id:
-            user_id = "123e4567-e89b-12d3-a456-426614174000"  # 默认测试用户ID
+            return {"status": "error", "message": "User ID not found in context"}
             
         if not session_id:
-            session_id = "123e4567-e89b-12d3-a456-426614174001"  # 默认测试会话ID
+            return {"status": "error", "message": "Session ID not found in context"}
 
         conn = _get_db_connection()
         cursor = conn.cursor(cursor_factory=RealDictCursor)
@@ -91,12 +121,19 @@ def add_tasks(tasks: List[Dict[str, Any]]) -> Dict[str, Any]:
         
         added_tasks = []
         for task in tasks:
-            # 生成任务ID
-            task_id = str(uuid4())
+            # 生成8位短任务ID
+            task_id = _generate_short_id()
             
             # 获取任务参数
             content = task.get("content", "")
-            status = task.get("status", "PENDING")
+            status = task.get("status", TaskStatus.PENDING.value)
+            
+            # 验证状态
+            if not _validate_task_status(status):
+                cursor.close()
+                conn.close()
+                return {"status": "error", "message": f"Invalid task status: {status}. Must be one of: PENDING, IN_PROGRESS, COMPLETE, CANCELLED, ERROR"}
+            
             parent_task_id = task.get("parent_task_id")
             
             # 插入任务到数据库
@@ -159,12 +196,12 @@ def update_tasks(tasks: List[Dict[str, Any]]) -> Dict[str, Any]:
         user_id = get_user_id()
         session_id = get_session_id()
         
-        # 如果没有从上下文获取到，则使用默认值（仅用于测试）
+        # 如果没有从上下文获取到，则返回错误
         if not user_id:
-            user_id = "123e4567-e89b-12d3-a456-426614174000"  # 默认测试用户ID
+            return {"status": "error", "message": "User ID not found in context"}
             
         if not session_id:
-            session_id = "123e4567-e89b-12d3-a456-426614174001"  # 默认测试会话ID
+            return {"status": "error", "message": "Session ID not found in context"}
 
         conn = _get_db_connection()
         cursor = conn.cursor(cursor_factory=RealDictCursor)
@@ -209,8 +246,15 @@ def update_tasks(tasks: List[Dict[str, Any]]) -> Dict[str, Any]:
                 update_values.append(task_update["content"])
                 
             if "status" in task_update:
+                # 验证状态
+                status = task_update["status"]
+                if not _validate_task_status(status):
+                    cursor.close()
+                    conn.close()
+                    return {"status": "error", "message": f"Invalid task status: {status}. Must be one of: PENDING, IN_PROGRESS, COMPLETE, CANCELLED, ERROR"}
+                
                 update_fields.append("status = %s")
-                update_values.append(task_update["status"])
+                update_values.append(status)
                 
             if "parent_task_id" in task_update:
                 update_fields.append("parent_task_id = %s")
@@ -269,12 +313,12 @@ def get_tasks(status: str = None) -> Dict[str, Any]:
         user_id = get_user_id()
         session_id = get_session_id()
         
-        # 如果没有从上下文获取到，则使用默认值（仅用于测试）
+        # 如果没有从上下文获取到，则返回错误
         if not user_id:
-            user_id = "123e4567-e89b-12d3-a456-426614174000"  # 默认测试用户ID
+            return {"status": "error", "message": "User ID not found in context"}
             
         if not session_id:
-            session_id = "123e4567-e89b-12d3-a456-426614174001"  # 默认测试会话ID
+            return {"status": "error", "message": "Session ID not found in context"}
 
         conn = _get_db_connection()
         cursor = conn.cursor(cursor_factory=RealDictCursor)
@@ -284,6 +328,12 @@ def get_tasks(status: str = None) -> Dict[str, Any]:
             cursor.close()
             conn.close()
             return {"status": "error", "message": f"User {user_id} does not exist"}
+        
+        # 如果提供了status，验证它是否有效
+        if status and not _validate_task_status(status):
+            cursor.close()
+            conn.close()
+            return {"status": "error", "message": f"Invalid task status: {status}. Must be one of: PENDING, IN_PROGRESS, COMPLETE, CANCELLED, ERROR"}
         
         # 构建查询语句
         query = "SELECT id, user_id, session_id, content, status, parent_task_id, created_at, updated_at FROM tasks WHERE user_id = %s"
@@ -323,63 +373,3 @@ def get_tasks(status: str = None) -> Dict[str, Any]:
     except Exception as e:
         logger.error(f"Error retrieving tasks: {str(e)}")
         return {"status": "error", "message": f"Failed to retrieve tasks: {str(e)}"}
-
-
-@tool
-def delete_tasks(task_ids: List[str]) -> Dict[str, Any]:
-    """删除一个或多个任务
-    
-    Args:
-        task_ids: 要删除的任务ID列表
-
-    Returns:
-        包含操作结果的字典
-    """
-    try:
-        # 从上下文获取user_id和session_id
-        user_id = get_user_id()
-        session_id = get_session_id()
-        
-        # 如果没有从上下文获取到，则使用默认值（仅用于测试）
-        if not user_id:
-            user_id = "123e4567-e89b-12d3-a456-426614174000"  # 默认测试用户ID
-            
-        if not session_id:
-            session_id = "123e4567-e89b-12d3-a456-426614174001"  # 默认测试会话ID
-
-        conn = _get_db_connection()
-        cursor = conn.cursor(cursor_factory=RealDictCursor)
-        
-        # 检查用户是否存在（在生产环境中启用，测试环境中可以禁用）
-        if not settings.debug and not _check_user_exists(cursor, user_id):
-            cursor.close()
-            conn.close()
-            return {"status": "error", "message": f"User {user_id} does not exist"}
-        
-        deleted_count = 0
-        for task_id in task_ids:
-            # 删除任务（仅当任务属于该用户时）
-            if session_id:
-                cursor.execute("""
-                    DELETE FROM tasks WHERE id = %s AND user_id = %s AND session_id = %s
-                """, (task_id, user_id, session_id))
-            else:
-                cursor.execute("""
-                    DELETE FROM tasks WHERE id = %s AND user_id = %s
-                """, (task_id, user_id))
-            
-            deleted_count += cursor.rowcount
-            logger.info(f"Deleted task {task_id} for user {user_id} in session {session_id}")
-        
-        conn.commit()
-        cursor.close()
-        conn.close()
-        
-        return {
-            "status": "success",
-            "message": f"Successfully deleted {deleted_count} tasks for user {user_id} in session {session_id}",
-            "deleted_count": deleted_count
-        }
-    except Exception as e:
-        logger.error(f"Error deleting tasks: {str(e)}")
-        return {"status": "error", "message": f"Failed to delete tasks: {str(e)}"}

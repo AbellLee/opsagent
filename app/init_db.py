@@ -100,12 +100,12 @@ def create_tables():
         # 创建任务表
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS tasks (
-                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                id VARCHAR(8) PRIMARY KEY,
                 user_id UUID REFERENCES users(user_id),
                 session_id UUID,
                 content TEXT NOT NULL,
                 status VARCHAR(20) NOT NULL DEFAULT 'PENDING',
-                parent_task_id UUID REFERENCES tasks(id),
+                parent_task_id VARCHAR(8) REFERENCES tasks(id),
                 created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
             )
