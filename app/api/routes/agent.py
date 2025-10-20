@@ -2,7 +2,7 @@
 Agent API路由模块
 负责处理与Agent相关的HTTP请求
 """
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, status, Depends
 from uuid import UUID
 from app.core.logger import logger
 
@@ -10,6 +10,8 @@ from app.core.logger import logger
 from app.services.agent.models import AgentExecuteRequest, AgentChatRequest
 from app.services.agent.handlers import execute_agent_task, handle_blocking_chat, handle_streaming_chat
 from app.services.agent.utils import build_agent_inputs, create_agent_config, format_error_message
+from app.api.deps import get_db
+from app.core.user_context import set_user_context
 
 # 创建路由器
 router = APIRouter(prefix="/api/sessions", tags=["agent"])
@@ -19,9 +21,28 @@ router = APIRouter(prefix="/api/sessions", tags=["agent"])
 async def execute_agent(
     session_id: UUID,
     request: AgentExecuteRequest,
+    db = Depends(get_db)
 ):
     """执行Agent任务"""
     try:
+        # 获取会话信息以验证用户ID
+        cursor = db.cursor()
+        cursor.execute(
+            "SELECT user_id FROM user_sessions WHERE session_id = %s",
+            (str(session_id),)
+        )
+        row = cursor.fetchone()
+        if not row:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="会话不存在"
+            )
+        
+        user_id = row[0]
+        
+        # 设置用户上下文
+        set_user_context(str(user_id), str(session_id))
+        
         result = await execute_agent_task(
             session_id=session_id,
             message=request.message,
@@ -42,6 +63,7 @@ async def execute_agent(
 async def chat_with_agent(
     session_id: UUID,
     request: AgentChatRequest,
+    db = Depends(get_db)
 ):
     """与Agent聊天（支持连续对话和流式响应）"""
     try:
@@ -52,8 +74,26 @@ async def chat_with_agent(
                 detail="消息内容不能为空"
             )
 
+        # 获取会话信息以验证用户ID
+        cursor = db.cursor()
+        cursor.execute(
+            "SELECT user_id FROM user_sessions WHERE session_id = %s",
+            (str(session_id),)
+        )
+        row = cursor.fetchone()
+        if not row:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="会话不存在"
+            )
+        
+        user_id = row[0]
+        
+        # 设置用户上下文
+        set_user_context(str(user_id), str(session_id))
+        
         # 构造输入和配置
-        inputs = build_agent_inputs(request.message, session_id)
+        inputs = build_agent_inputs(request.message, session_id, str(user_id))
         config = create_agent_config(session_id)
 
         # 根据响应模式选择处理方式
@@ -73,4 +113,3 @@ async def chat_with_agent(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"与Agent聊天失败: {error_detail}"
         )
-

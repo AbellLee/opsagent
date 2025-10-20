@@ -8,6 +8,7 @@ node_modules/
 config/local.env
 .env
 .augment
+.lingma
 app/.env
 
 # 忽略 build 输出目录

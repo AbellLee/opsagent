@@ -97,6 +97,20 @@ def create_tables():
             )
         """)
         
+        # 创建任务表
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS tasks (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                user_id UUID REFERENCES users(user_id),
+                session_id UUID,
+                content TEXT NOT NULL,
+                status VARCHAR(20) NOT NULL DEFAULT 'PENDING',
+                parent_task_id UUID REFERENCES tasks(id),
+                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        
         # 提交事务
         conn.commit()
         logger.info("数据库表创建成功")
