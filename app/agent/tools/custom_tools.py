@@ -1,25 +1,18 @@
-from typing import Dict, Any, List
-from langchain_core.tools import tool
-from app.core.logger import logger
-from uuid import uuid4, UUID
-import json
-from datetime import datetime
 from enum import Enum
+from typing import List, Dict, Any, Optional
+from uuid import uuid4
 import hashlib
-import base64
-
-# 数据库连接
-from app.core.config import get_settings
+from datetime import datetime
 import psycopg2
 from psycopg2.extras import RealDictCursor
 
-# 用户上下文管理
+from langchain_core.tools import tool
+
+from app.core.config import settings
+from app.core.logger import logger
 from app.core.user_context import get_user_id, get_session_id
 
-settings = get_settings()
-
-
-class TaskStatus(str, Enum):
+class TaskStatus(Enum):
     """任务状态枚举"""
     PENDING = "PENDING"
     IN_PROGRESS = "IN_PROGRESS"
@@ -27,33 +20,19 @@ class TaskStatus(str, Enum):
     CANCELLED = "CANCELLED"
     ERROR = "ERROR"
 
-
-# 注册自定义工具
-def get_custom_tools() -> list:
-    """获取所有自定义工具"""
-    return [
-        add_tasks,
-        update_tasks,
-        get_tasks
-    ]
-
-
 def _get_db_connection():
     """获取数据库连接"""
     return psycopg2.connect(settings.database_url)
 
-
 def _check_user_exists(cursor, user_id: str) -> bool:
     """检查用户是否存在"""
-    cursor.execute("SELECT 1 FROM users WHERE user_id = %s", (user_id,))
+    cursor.execute("SELECT 1 FROM users WHERE id = %s", (user_id,))
     return cursor.fetchone() is not None
-
 
 def _check_session_exists(cursor, session_id: str, user_id: str) -> bool:
     """检查会话是否存在且属于指定用户"""
     cursor.execute("SELECT 1 FROM user_sessions WHERE session_id = %s AND user_id = %s", (session_id, user_id))
     return cursor.fetchone() is not None
-
 
 def _validate_task_status(status: str) -> bool:
     """验证任务状态是否有效"""
@@ -62,7 +41,6 @@ def _validate_task_status(status: str) -> bool:
         return True
     except ValueError:
         return False
-
 
 def _generate_short_id() -> str:
     """生成缩短的ID"""
@@ -73,6 +51,40 @@ def _generate_short_id() -> str:
     short_id = hash_obj.hexdigest()[:8]
     return short_id
 
+async def _notify_session_task_update(session_id: str):
+    """通知会话任务更新"""
+    if session_id:
+        try:
+            # 导入通知函数
+            from app.api.routes.tasks import notify_task_update
+            logger.info(f"准备异步通知任务更新: session_id={session_id}")
+            await notify_task_update(session_id)
+        except Exception as e:
+            logger.error(f"通知任务更新失败: {e}")
+
+def _notify_task_update_sync(session_id: str):
+    """同步方式通知任务更新"""
+    if session_id:
+        try:
+            logger.info(f"准备同步通知任务更新: session_id={session_id}")
+            # 在异步环境中运行通知
+            import asyncio
+            # 尝试获取当前事件循环
+            try:
+                loop = asyncio.get_running_loop()
+            except RuntimeError:
+                # 如果没有运行中的事件循环，创建一个新的
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+            
+            # 创建任务但不等待完成
+            loop.create_task(_notify_session_task_update(session_id))
+        except Exception as e:
+            logger.error(f"同步通知任务更新失败: {e}")
+
+def get_custom_tools():
+    """获取所有自定义工具"""
+    return [add_tasks, update_tasks, get_tasks]
 
 @tool
 def add_tasks(tasks: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -163,6 +175,9 @@ def add_tasks(tasks: List[Dict[str, Any]]) -> Dict[str, Any]:
         cursor.close()
         conn.close()
         
+        # 通知前端任务更新
+        _notify_task_update_sync(session_id)
+        
         return {
             "status": "success", 
             "message": f"Successfully added {len(added_tasks)} tasks for user {user_id} in session {session_id}", 
@@ -171,7 +186,6 @@ def add_tasks(tasks: List[Dict[str, Any]]) -> Dict[str, Any]:
     except Exception as e:
         logger.error(f"Error adding tasks: {str(e)}")
         return {"status": "error", "message": f"Failed to add tasks: {str(e)}"}
-
 
 @tool
 def update_tasks(tasks: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -286,6 +300,9 @@ def update_tasks(tasks: List[Dict[str, Any]]) -> Dict[str, Any]:
         cursor.close()
         conn.close()
         
+        # 通知前端任务更新
+        _notify_task_update_sync(session_id)
+        
         return {
             "status": "success", 
             "message": f"Successfully updated {len(updated_tasks)} tasks for user {user_id} in session {session_id}", 
@@ -294,7 +311,6 @@ def update_tasks(tasks: List[Dict[str, Any]]) -> Dict[str, Any]:
     except Exception as e:
         logger.error(f"Error updating tasks: {str(e)}")
         return {"status": "error", "message": f"Failed to update tasks: {str(e)}"}
-
 
 @tool
 def get_tasks(status: str = None) -> Dict[str, Any]:

@@ -29,46 +29,17 @@
       
       <div v-else class="task-items">
         <div 
-          v-for="task in tasks" 
+          v-for="task in rootTasks" 
           :key="task.id" 
-          class="task-item"
-          :class="`task-status-${task.status.toLowerCase()}`"
+          class="task-item-wrapper"
         >
-          <div class="task-header">
-            <div class="task-id">#{{ task.id }}</div>
-            <n-tag 
-              :type="getTaskStatusType(task.status)"
-              size="small"
-              class="task-status-tag"
-            >
-              {{ getTaskStatusText(task.status) }}
-            </n-tag>
-          </div>
-          
-          <div class="task-content">
-            {{ task.content }}
-          </div>
-          
-          <div class="task-meta">
-            <div class="task-time">
-              <n-icon size="12">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8z"/>
-                  <path d="M12.5 7H11v6l5.25 3.15.75-1.23-4.5-2.67z"/>
-                </svg>
-              </n-icon>
-              <span>{{ formatTime(task.created_at) }}</span>
-            </div>
-            
-            <div v-if="task.parent_task_id" class="task-parent">
-              <n-icon size="12">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M12 12l8-8H4l8 8zm0 2l-8 8h16l-8-8z"/>
-                </svg>
-              </n-icon>
-              <span>父任务: #{{ task.parent_task_id }}</span>
-            </div>
-          </div>
+          <TaskItem 
+            :task="task"
+            :all-tasks="tasks"
+            :get-task-status-text="getTaskStatusText"
+            :get-task-status-type="getTaskStatusType"
+            :format-time="formatTime"
+          />
         </div>
       </div>
     </n-scrollbar>
@@ -76,9 +47,10 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted, watch } from 'vue'
+import { ref, onMounted, onUnmounted, watch, computed } from 'vue'
 import { NButton, NIcon, NScrollbar, NEmpty, NTag } from 'naive-ui'
 import { taskAPI } from '../api'
+import TaskItem from './TaskItem.vue'
 
 const props = defineProps({
   sessionId: {
@@ -107,7 +79,12 @@ const TASK_STATUS_TYPE = {
 // 响应式数据
 const tasks = ref([])
 const loading = ref(false)
-const refreshInterval = ref(null)
+const websocket = ref(null)
+
+// 计算根任务（没有父任务的任务）
+const rootTasks = computed(() => {
+  return tasks.value.filter(task => !task.parent_task_id)
+})
 
 // 获取任务状态显示文本
 const getTaskStatusText = (status) => {
@@ -139,6 +116,7 @@ const refreshTasks = async () => {
   try {
     const response = await taskAPI.list(props.sessionId)
     tasks.value = response.tasks || []
+    console.log('任务列表已刷新:', tasks.value)
   } catch (error) {
     console.error('获取任务列表失败:', error)
   } finally {
@@ -146,18 +124,51 @@ const refreshTasks = async () => {
   }
 }
 
-// 设置定时刷新
-const startAutoRefresh = () => {
-  refreshInterval.value = setInterval(() => {
-    refreshTasks()
-  }, 10000) // 每10秒刷新一次
+// 初始化WebSocket连接
+const initWebSocket = () => {
+  if (!props.sessionId) return
+
+  // 关闭现有的连接
+  if (websocket.value) {
+    websocket.value.close()
+  }
+
+  // 创建新的WebSocket连接
+  const wsUrl = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/api/tasks/ws/${props.sessionId}`
+  websocket.value = new WebSocket(wsUrl)
+
+  websocket.value.onopen = () => {
+    console.log('任务WebSocket连接已建立')
+  }
+
+  websocket.value.onmessage = (event) => {
+    try {
+      const data = JSON.parse(event.data)
+      console.log('收到WebSocket消息:', data)
+      if (data.type === 'task_update') {
+        // 更新任务列表
+        console.log('收到任务更新通知，正在刷新任务列表...')
+        refreshTasks()
+      }
+    } catch (error) {
+      console.error('解析WebSocket消息失败:', error)
+    }
+  }
+
+  websocket.value.onerror = (error) => {
+    console.error('任务WebSocket连接错误:', error)
+  }
+
+  websocket.value.onclose = () => {
+    console.log('任务WebSocket连接已关闭')
+  }
 }
 
-// 停止定时刷新
-const stopAutoRefresh = () => {
-  if (refreshInterval.value) {
-    clearInterval(refreshInterval.value)
-    refreshInterval.value = null
+// 关闭WebSocket连接
+const closeWebSocket = () => {
+  if (websocket.value) {
+    websocket.value.close()
+    websocket.value = null
   }
 }
 
@@ -165,18 +176,21 @@ const stopAutoRefresh = () => {
 watch(() => props.sessionId, (newSessionId) => {
   if (newSessionId) {
     refreshTasks()
+    initWebSocket()
+  } else {
+    closeWebSocket()
   }
 })
 
 onMounted(() => {
   if (props.sessionId) {
     refreshTasks()
+    initWebSocket()
   }
-  startAutoRefresh()
 })
 
 onUnmounted(() => {
-  stopAutoRefresh()
+  closeWebSocket()
 })
 </script>
 
@@ -224,80 +238,6 @@ onUnmounted(() => {
   gap: 12px;
 }
 
-.task-item {
-  padding: 12px;
-  border-radius: 8px;
-  background-color: #ffffff;
-  border: 1px solid #e8e8e8;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
-  transition: all 0.2s ease;
-}
-
-.task-item:hover {
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  border-color: #d9d9d9;
-}
-
-.task-item.task-status-complete {
-  border-left: 3px solid #52c41a;
-}
-
-.task-item.task-status-in_progress {
-  border-left: 3px solid #fa8c16;
-}
-
-.task-item.task-status-pending {
-  border-left: 3px solid #1890ff;
-}
-
-.task-item.task-status-cancelled {
-  border-left: 3px solid #999;
-}
-
-.task-item.task-status-error {
-  border-left: 3px solid #ff4d4f;
-}
-
-.task-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 8px;
-}
-
-.task-id {
-  font-size: 12px;
-  font-weight: 600;
-  color: #666;
-}
-
-.task-status-tag {
-  font-size: 10px;
-}
-
-.task-content {
-  font-size: 13px;
-  color: #333;
-  line-height: 1.4;
-  margin-bottom: 10px;
-  word-break: break-word;
-}
-
-.task-meta {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  font-size: 11px;
-  color: #999;
-}
-
-.task-time,
-.task-parent {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
 /* 暗色主题适配 */
 html.dark .task-list-container {
   background-color: #1e1e1e;
@@ -311,19 +251,5 @@ html.dark .task-list-header {
 
 html.dark .header-title {
   color: #e0e0e0;
-}
-
-html.dark .task-item {
-  background-color: #2d2d2d;
-  border: 1px solid #333;
-}
-
-html.dark .task-content {
-  color: #e0e0e0;
-}
-
-html.dark .task-id,
-html.dark .task-meta {
-  color: #aaa;
 }
 </style>
