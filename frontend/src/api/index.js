@@ -156,3 +156,11 @@ export const mcpConfigAPI = {
   validate: (configData) => apiClient.post('/mcp-configs/validate', configData),
   reload: () => apiClient.post('/mcp-configs/reload')
 }
+
+// 任务相关 API
+export const taskAPI = {
+  list: (sessionId) => apiClient.get(`/sessions/${sessionId}/tasks`),
+  add: (taskData) => apiClient.post('/tasks', taskData),
+  update: (taskId, taskData) => apiClient.put(`/tasks/${taskId}`, taskData),
+  get: (taskId) => apiClient.get(`/tasks/${taskId}`)
+}

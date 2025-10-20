@@ -383,3 +383,43 @@ def get_session_messages(session_id: UUID, db = Depends(get_db)):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"获取会话消息失败: {str(e)}"
         )
+
+
+@router.get("/{session_id}/tasks")
+def get_session_tasks(session_id: UUID, db = Depends(get_db)):
+    """获取会话任务列表"""
+    try:
+        cursor = db.cursor()
+        
+        # 查询该会话下的所有任务
+        cursor.execute("""
+            SELECT id, user_id, session_id, content, status, parent_task_id, created_at, updated_at
+            FROM tasks 
+            WHERE session_id = %s
+            ORDER BY created_at ASC
+        """, (str(session_id),))
+        
+        tasks = cursor.fetchall()
+        
+        # 格式化任务数据
+        formatted_tasks = []
+        for task in tasks:
+            formatted_tasks.append({
+                "id": task[0],
+                "user_id": str(task[1]) if task[1] else None,
+                "session_id": str(task[2]) if task[2] else None,
+                "content": task[3],
+                "status": task[4],
+                "parent_task_id": task[5],
+                "created_at": task[6].isoformat() if task[6] else None,
+                "updated_at": task[7].isoformat() if task[7] else None
+            })
+        
+        return {"tasks": formatted_tasks}
+        
+    except Exception as e:
+        logger.error(f"获取会话任务失败: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"获取会话任务失败: {str(e)}"
+        )
