@@ -59,8 +59,9 @@ async def _notify_session_task_update(session_id: str):
             from app.api.routes.tasks import notify_task_update
             logger.info(f"准备异步通知任务更新: session_id={session_id}")
             await notify_task_update(session_id)
+            logger.info(f"异步通知任务更新完成: session_id={session_id}")
         except Exception as e:
-            logger.error(f"通知任务更新失败: {e}")
+            logger.error(f"通知任务更新失败: {e}", exc_info=True)
 
 def _notify_task_update_sync(session_id: str):
     """同步方式通知任务更新"""
@@ -72,15 +73,14 @@ def _notify_task_update_sync(session_id: str):
             # 尝试获取当前事件循环
             try:
                 loop = asyncio.get_running_loop()
+                # 如果在异步环境中，创建任务但不等待完成
+                loop.create_task(_notify_session_task_update(session_id))
             except RuntimeError:
-                # 如果没有运行中的事件循环，创建一个新的
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-            
-            # 创建任务但不等待完成
-            loop.create_task(_notify_session_task_update(session_id))
+                # 如果没有运行中的事件循环，直接运行
+                asyncio.run(_notify_session_task_update(session_id))
+            logger.info(f"已创建异步通知任务: session_id={session_id}")
         except Exception as e:
-            logger.error(f"同步通知任务更新失败: {e}")
+            logger.error(f"同步通知任务更新失败: {e}", exc_info=True)
 
 def get_custom_tools():
     """获取所有自定义工具"""
@@ -176,7 +176,10 @@ def add_tasks(tasks: List[Dict[str, Any]]) -> Dict[str, Any]:
         conn.close()
         
         # 通知前端任务更新
-        _notify_task_update_sync(session_id)
+        try:
+            _notify_task_update_sync(session_id)
+        except Exception as e:
+            logger.error(f"任务添加后通知失败: {e}", exc_info=True)
         
         return {
             "status": "success", 
@@ -301,7 +304,12 @@ def update_tasks(tasks: List[Dict[str, Any]]) -> Dict[str, Any]:
         conn.close()
         
         # 通知前端任务更新
-        _notify_task_update_sync(session_id)
+        logger.info(f"任务更新完成，准备通知前端: session_id={session_id}")
+        try:
+            _notify_task_update_sync(session_id)
+        except Exception as e:
+            logger.error(f"任务更新后通知失败: {e}", exc_info=True)
+        logger.info(f"通知前端任务完成: session_id={session_id}")
         
         return {
             "status": "success", 
@@ -309,7 +317,7 @@ def update_tasks(tasks: List[Dict[str, Any]]) -> Dict[str, Any]:
             "tasks": updated_tasks
         }
     except Exception as e:
-        logger.error(f"Error updating tasks: {str(e)}")
+        logger.error(f"Error updating tasks: {str(e)}", exc_info=True)
         return {"status": "error", "message": f"Failed to update tasks: {str(e)}"}
 
 @tool

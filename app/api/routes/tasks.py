@@ -1,85 +1,94 @@
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
-from typing import List, Dict
+from typing import Dict, List
+from uuid import UUID
+from app.core.logger import logger
 import json
 import asyncio
-from uuid import UUID
-from app.api.deps import get_db
-from app.core.logger import logger
+from fastapi.responses import StreamingResponse
 
 router = APIRouter(prefix="/api/tasks", tags=["tasks"])
 
-# 存储活跃的WebSocket连接
-active_connections: Dict[str, List[WebSocket]] = {}
+# 存储WebSocket连接
+websocket_connections: Dict[str, List[WebSocket]] = {}
 
 async def notify_task_update(session_id: str):
     """通知指定会话的任务更新"""
-    logger.info(f"准备通知任务更新: session_id={session_id}, 当前连接数={len(active_connections.get(session_id, []))}")
+    session_id_str = str(session_id)
+    logger.info(f"准备通知任务更新: session_id={session_id_str}")
     
-    if session_id in active_connections:
-        disconnected = []
-        for connection in active_connections[session_id]:
+    if session_id_str in websocket_connections:
+        # 向所有WebSocket连接发送更新消息
+        disconnected_connections = []
+        for websocket in websocket_connections[session_id_str]:
             try:
-                await connection.send_text(json.dumps({
-                    "type": "task_update",
-                    "session_id": session_id
+                await websocket.send_text(json.dumps({
+                    "type": "task_update", 
+                    "session_id": session_id_str
                 }))
-                logger.info(f"已发送任务更新通知到连接: {connection}")
             except WebSocketDisconnect:
-                disconnected.append(connection)
-                logger.warning(f"WebSocket连接已断开: {connection}")
+                disconnected_connections.append(websocket)
             except Exception as e:
-                logger.error(f"发送WebSocket消息失败: {e}")
-                disconnected.append(connection)
+                logger.error(f"向WebSocket发送消息失败: {e}", exc_info=True)
+                disconnected_connections.append(websocket)
         
-        # 移除断开的连接
-        for connection in disconnected:
-            if connection in active_connections[session_id]:
-                active_connections[session_id].remove(connection)
+        # 清理断开的连接
+        for websocket in disconnected_connections:
+            if websocket in websocket_connections[session_id_str]:
+                websocket_connections[session_id_str].remove(websocket)
         
-        # 如果会话没有连接了，清理字典项
-        if not active_connections[session_id]:
-            del active_connections[session_id]
-            logger.info(f"已清理会话 {session_id} 的连接")
+        logger.info(f"已向 {len(websocket_connections[session_id_str])} 个客户端发送任务更新通知")
+    else:
+        logger.info(f"会话 {session_id_str} 没有活跃的WebSocket连接")
 
 @router.websocket("/ws/{session_id}")
 async def websocket_tasks(websocket: WebSocket, session_id: UUID):
     """任务WebSocket端点"""
+    session_id_str = str(session_id)
+    
     # 接受WebSocket连接
     await websocket.accept()
     
-    session_id_str = str(session_id)
+    # 将连接添加到会话连接列表中
+    if session_id_str not in websocket_connections:
+        websocket_connections[session_id_str] = []
     
-    # 将连接添加到活跃连接列表
-    if session_id_str not in active_connections:
-        active_connections[session_id_str] = []
-    active_connections[session_id_str].append(websocket)
-    
-    logger.info(f"任务WebSocket连接已建立: session_id={session_id_str}, 当前连接数={len(active_connections[session_id_str])}")
+    websocket_connections[session_id_str].append(websocket)
+    logger.info(f"任务WebSocket连接已建立: session_id={session_id_str}, 当前连接数={len(websocket_connections[session_id_str])}")
     
     try:
+        # 发送初始连接确认消息
+        await websocket.send_text(json.dumps({
+            "type": "connected", 
+            "session_id": session_id_str
+        }))
+        
+        # 保持连接并监听客户端消息
         while True:
-            # 使用异步等待来接收消息，但不处理业务逻辑
-            # 这样可以保持连接活跃，同时允许其他协程发送更新通知
+            # 等待接收消息
+            data = await websocket.receive_text()
             try:
-                # 等待接收消息，设置超时以允许定期检查
-                data = await asyncio.wait_for(websocket.receive_text(), timeout=30.0)
-                # 简单回显消息，实际应用中可以处理客户端请求
-                await websocket.send_text(f"Echo: {data}")
-            except asyncio.TimeoutError:
-                # 超时后继续循环，保持连接活跃
-                continue
+                message = json.loads(data)
+                # 处理心跳消息
+                if message.get("type") == "heartbeat":
+                    # 回复心跳
+                    await websocket.send_text(json.dumps({
+                        "type": "heartbeat_ack"
+                    }))
+                # 可以在这里处理其他类型的消息
+            except json.JSONDecodeError:
+                logger.warning(f"收到无效的JSON消息: {data}")
     except WebSocketDisconnect:
-        logger.info(f"任务WebSocket连接已断开: session_id={session_id_str}")
+        logger.info(f"任务WebSocket连接断开: session_id={session_id_str}")
     except Exception as e:
         logger.error(f"任务WebSocket连接异常: session_id={session_id_str}, error={e}")
     finally:
         # 清理连接
-        if session_id_str in active_connections and websocket in active_connections[session_id_str]:
-            active_connections[session_id_str].remove(websocket)
-            if not active_connections[session_id_str]:
-                del active_connections[session_id_str]
-        await websocket.close()
-        logger.info(f"WebSocket连接已关闭: session_id={session_id_str}")
-        
+        if session_id_str in websocket_connections and websocket in websocket_connections[session_id_str]:
+            websocket_connections[session_id_str].remove(websocket)
+            logger.info(f"WebSocket连接已关闭: session_id={session_id_str}, 剩余连接数={len(websocket_connections.get(session_id_str, []))}")
+            # 如果没有客户端连接了，清理该会话的条目
+            if not websocket_connections[session_id_str]:
+                del websocket_connections[session_id_str]
+
 # 导出通知函数供其他模块使用
 __all__ = ["router", "notify_task_update"]

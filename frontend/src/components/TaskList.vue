@@ -80,6 +80,10 @@ const TASK_STATUS_TYPE = {
 const tasks = ref([])
 const loading = ref(false)
 const websocket = ref(null)
+const reconnectAttempts = ref(0)
+const maxReconnectAttempts = ref(5)
+const reconnectDelay = ref(1000)
+const heartbeatInterval = ref(null)
 
 // 计算根任务（没有父任务的任务）
 const rootTasks = computed(() => {
@@ -124,21 +128,39 @@ const refreshTasks = async () => {
   }
 }
 
+// 发送心跳包
+const sendHeartbeat = () => {
+  if (websocket.value && websocket.value.readyState === WebSocket.OPEN) {
+    websocket.value.send(JSON.stringify({ type: 'heartbeat' }))
+  }
+}
+
 // 初始化WebSocket连接
 const initWebSocket = () => {
   if (!props.sessionId) return
 
-  // 关闭现有的连接
+  // 关闭现有的连接和心跳
   if (websocket.value) {
     websocket.value.close()
   }
+  
+  if (heartbeatInterval.value) {
+    clearInterval(heartbeatInterval.value)
+    heartbeatInterval.value = null
+  }
 
   // 创建新的WebSocket连接
-  const wsUrl = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/api/tasks/ws/${props.sessionId}`
+  const protocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://'
+  const wsUrl = `${protocol}${window.location.host}/api/tasks/ws/${props.sessionId}`
   websocket.value = new WebSocket(wsUrl)
 
   websocket.value.onopen = () => {
     console.log('任务WebSocket连接已建立')
+    // 重置重连尝试次数
+    reconnectAttempts.value = 0
+    
+    // 启动心跳机制
+    heartbeatInterval.value = setInterval(sendHeartbeat, 30000) // 每30秒发送一次心跳
   }
 
   websocket.value.onmessage = (event) => {
@@ -159,8 +181,25 @@ const initWebSocket = () => {
     console.error('任务WebSocket连接错误:', error)
   }
 
-  websocket.value.onclose = () => {
-    console.log('任务WebSocket连接已关闭')
+  websocket.value.onclose = (event) => {
+    console.log('任务WebSocket连接已关闭:', event.code, event.reason)
+    
+    // 清理心跳机制
+    if (heartbeatInterval.value) {
+      clearInterval(heartbeatInterval.value)
+      heartbeatInterval.value = null
+    }
+    
+    // 实现重连机制
+    if (reconnectAttempts.value < maxReconnectAttempts.value) {
+      reconnectAttempts.value++
+      console.log(`尝试重新连接 (${reconnectAttempts.value}/${maxReconnectAttempts.value})...`)
+      setTimeout(() => {
+        initWebSocket()
+      }, reconnectDelay.value * reconnectAttempts.value) // 逐渐增加延迟
+    } else {
+      console.log('达到最大重连次数，停止重连')
+    }
   }
 }
 
@@ -169,6 +208,11 @@ const closeWebSocket = () => {
   if (websocket.value) {
     websocket.value.close()
     websocket.value = null
+  }
+  
+  if (heartbeatInterval.value) {
+    clearInterval(heartbeatInterval.value)
+    heartbeatInterval.value = null
   }
 }
 
