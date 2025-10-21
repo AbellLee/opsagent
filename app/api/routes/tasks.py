@@ -64,8 +64,8 @@ async def websocket_tasks(websocket: WebSocket, session_id: UUID):
         
         # 保持连接并监听客户端消息
         while True:
-            # 等待接收消息
-            data = await websocket.receive_text()
+            # 等待接收消息，设置60秒超时
+            data = await asyncio.wait_for(websocket.receive_text(), timeout=60.0)
             try:
                 message = json.loads(data)
                 # 处理心跳消息

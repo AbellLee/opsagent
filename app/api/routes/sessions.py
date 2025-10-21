@@ -112,7 +112,17 @@ def update_session_name(session_id: UUID, session_name: str, db = Depends(get_db
 def delete_session(session_id: UUID, db = Depends(get_db)):
     """删除会话"""
     try:
-        # 首先删除LangGraph检查点数据
+        # 首先删除与该会话相关的所有任务
+        cursor = db.cursor()
+        cursor.execute(
+            "DELETE FROM tasks WHERE session_id = %s",
+            (str(session_id),)
+        )
+        task_count = cursor.rowcount
+        db.commit()
+        logger.info(f"已删除 {task_count} 个与会话 {session_id} 相关的任务")
+        
+        # 然后删除LangGraph检查点数据
         from langgraph.checkpoint.postgres import PostgresSaver
         from app.core.config import settings
         
@@ -120,7 +130,7 @@ def delete_session(session_id: UUID, db = Depends(get_db)):
         with PostgresSaver.from_conn_string(settings.database_url) as checkpointer:
             checkpointer.delete_thread(str(session_id))
         
-        # 然后删除用户会话表中的数据
+        # 最后删除用户会话表中的数据
         cursor = db.cursor()
         cursor.execute(
             "DELETE FROM user_sessions WHERE session_id = %s",

@@ -160,7 +160,7 @@ const initWebSocket = () => {
     reconnectAttempts.value = 0
     
     // 启动心跳机制
-    heartbeatInterval.value = setInterval(sendHeartbeat, 30000) // 每30秒发送一次心跳
+    heartbeatInterval.value = setInterval(sendHeartbeat, 25000) // 每25秒发送一次心跳
   }
 
   websocket.value.onmessage = (event) => {
@@ -191,11 +191,18 @@ const initWebSocket = () => {
     }
     
     // 实现重连机制
+    // 只有当session_id没有变化时才尝试重连
+    const currentSessionId = props.sessionId;
     if (reconnectAttempts.value < maxReconnectAttempts.value) {
       reconnectAttempts.value++
       console.log(`尝试重新连接 (${reconnectAttempts.value}/${maxReconnectAttempts.value})...`)
       setTimeout(() => {
-        initWebSocket()
+        // 检查session_id是否发生变化
+        if (props.sessionId === currentSessionId) {
+          initWebSocket()
+        } else {
+          console.log('会话已切换，取消重连')
+        }
       }, reconnectDelay.value * reconnectAttempts.value) // 逐渐增加延迟
     } else {
       console.log('达到最大重连次数，停止重连')
