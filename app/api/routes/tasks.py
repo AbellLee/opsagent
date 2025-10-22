@@ -11,6 +11,9 @@ router = APIRouter(prefix="/api/tasks", tags=["tasks"])
 # 存储WebSocket连接
 websocket_connections: Dict[str, List[WebSocket]] = {}
 
+# 导出 websocket_connections 供其他模块使用
+__all__ = ["router", "notify_task_update", "websocket_connections"]
+
 async def notify_task_update(session_id: str):
     """通知指定会话的任务更新"""
     session_id_str = str(session_id)
@@ -74,6 +77,16 @@ async def websocket_tasks(websocket: WebSocket, session_id: UUID):
                     await websocket.send_text(json.dumps({
                         "type": "heartbeat_ack"
                     }))
+                # 处理用户确认响应
+                elif message.get("type") == "user_confirmation_response":
+                    confirmation_id = message.get("confirmation_id")
+                    if confirmation_id:
+                        # 延迟导入以避免循环导入
+                        from app.agent.tools.custom_tools import resolve_user_confirmation
+                        
+                        # 解决用户确认请求
+                        resolve_user_confirmation(confirmation_id, message)
+                        logger.info(f"已处理用户确认响应: confirmation_id={confirmation_id}")
                 # 可以在这里处理其他类型的消息
             except json.JSONDecodeError:
                 logger.warning(f"收到无效的JSON消息: {data}")

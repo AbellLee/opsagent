@@ -5,12 +5,17 @@ import hashlib
 from datetime import datetime
 import psycopg2
 from psycopg2.extras import RealDictCursor
+import json
+import asyncio
 
 from langchain_core.tools import tool
 
 from app.core.config import settings
 from app.core.logger import logger
 from app.core.user_context import get_user_id, get_session_id
+
+# 存储用户确认的 futures，用于等待用户响应
+user_confirmation_futures = {}
 
 class TaskStatus(Enum):
     """任务状态枚举"""
@@ -42,29 +47,68 @@ def _validate_task_status(status: str) -> bool:
     except ValueError:
         return False
 
-def _generate_short_id() -> str:
-    """生成缩短的ID"""
-    # 生成UUID并转换为8位短ID
-    full_uuid = str(uuid4())
-    # 使用MD5哈希然后取前8位
-    hash_obj = hashlib.md5(full_uuid.encode())
-    short_id = hash_obj.hexdigest()[:8]
-    return short_id
-
 async def _notify_session_task_update(session_id: str):
     """通知会话任务更新"""
+    # 延迟导入以避免循环导入
+    from app.api.routes.tasks import notify_task_update
+    
     if session_id:
         try:
-            # 导入通知函数
-            from app.api.routes.tasks import notify_task_update
             logger.info(f"准备异步通知任务更新: session_id={session_id}")
             await notify_task_update(session_id)
             logger.info(f"异步通知任务更新完成: session_id={session_id}")
         except Exception as e:
             logger.error(f"通知任务更新失败: {e}", exc_info=True)
 
+def _send_user_confirmation_request(session_id: str, confirmation_data: Dict[str, Any]):
+    """发送用户确认请求"""
+    # 延迟导入以避免循环导入
+    from app.api.routes.tasks import websocket_connections
+    import json
+    
+    session_id_str = str(session_id)
+    logger.info(f"准备发送用户确认请求: session_id={session_id_str}")
+    
+    async def _send_impl():
+        if session_id_str in websocket_connections:
+            # 向所有WebSocket连接发送用户确认请求消息
+            disconnected_connections = []
+            for websocket in websocket_connections[session_id_str]:
+                try:
+                    # 发送用户确认请求消息
+                    await websocket.send_text(json.dumps(confirmation_data))
+                except Exception as e:
+                    logger.error(f"向WebSocket发送用户确认请求失败: {e}", exc_info=True)
+                    disconnected_connections.append(websocket)
+            
+            # 清理断开的连接
+            for websocket in disconnected_connections:
+                if websocket in websocket_connections[session_id_str]:
+                    websocket_connections[session_id_str].remove(websocket)
+            
+            logger.info(f"已向 {len(websocket_connections[session_id_str])} 个客户端发送用户确认请求")
+            return True
+        else:
+            logger.info(f"会话 {session_id_str} 没有活跃的WebSocket连接")
+            return False
+    
+    # 在事件循环中运行异步函数
+    try:
+        # 尝试获取当前事件循环
+        loop = asyncio.get_running_loop()
+        # 创建任务但不等待完成
+        task = loop.create_task(_send_impl())
+        # 等待任务完成并返回结果
+        return task
+    except RuntimeError:
+        # 如果没有运行中的事件循环，直接运行
+        return asyncio.run(_send_impl())
+
 def _notify_task_update_sync(session_id: str):
     """同步方式通知任务更新"""
+    # 延迟导入以避免循环导入
+    from app.api.routes.tasks import notify_task_update
+    
     if session_id:
         try:
             logger.info(f"准备同步通知任务更新: session_id={session_id}")
@@ -84,7 +128,116 @@ def _notify_task_update_sync(session_id: str):
 
 def get_custom_tools():
     """获取所有自定义工具"""
-    return [add_tasks, update_tasks, get_tasks]
+    return [add_tasks, update_tasks, get_tasks, request_user_confirmation]
+
+@tool
+async def request_user_confirmation(
+    title: str,
+    message: str,
+    options: List[str] = None,
+    default_value: str = None
+) -> Dict[str, Any]:
+    """
+    当需求不明确、有多个方案或需要更新方案/策略时，请求用户确认的工具。
+    该工具会通过WebSocket向前端发送确认请求消息，并等待用户响应。
+    
+    Args:
+        title: 确认框标题
+        message: 确认消息内容
+        options: 可选的选项列表（可选）
+        default_value: 默认值（可选）
+
+    Returns:
+        包含用户选择结果的字典
+    """
+    try:
+        # 从上下文获取user_id和session_id
+        user_id = get_user_id()
+        session_id = get_session_id()
+        
+        # 如果没有从上下文获取到，则返回错误
+        if not user_id:
+            return {"status": "error", "message": "User ID not found in context"}
+            
+        if not session_id:
+            return {"status": "error", "message": "Session ID not found in context"}
+
+        # 生成确认请求ID
+        confirmation_id = str(uuid4())
+        
+        # 创建 future 用于等待用户响应
+        future = asyncio.Future()
+        user_confirmation_futures[confirmation_id] = future
+        
+        # 构造确认请求消息
+        confirmation_request = {
+            "type": "user_confirmation_request",
+            "confirmation_id": confirmation_id,
+            "title": title,
+            "message": message,
+            "options": options,
+            "default_value": default_value,
+            "user_id": user_id,
+            "session_id": session_id,
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        # 通过WebSocket发送确认请求消息
+        try:
+            send_task = _send_user_confirmation_request(session_id, confirmation_request)
+            # 等待发送任务完成
+            success = await send_task if asyncio.isfuture(send_task) else send_task
+            if not success:
+                return {"status": "error", "message": "发送确认请求失败：没有可用的WebSocket连接"}
+            logger.info(f"已发送用户确认请求: confirmation_id={confirmation_id}")
+        except Exception as e:
+            logger.error(f"发送用户确认请求失败: {e}", exc_info=True)
+            return {"status": "error", "message": f"发送确认请求失败: {str(e)}"}
+
+        # 等待用户响应（设置超时时间）
+        try:
+            user_response = await asyncio.wait_for(future, timeout=300.0)  # 5分钟超时
+            logger.info(f"收到用户确认响应: confirmation_id={confirmation_id}")
+            
+            # 清理 future
+            if confirmation_id in user_confirmation_futures:
+                del user_confirmation_futures[confirmation_id]
+            
+            return {
+                "status": "success",
+                "confirmation_id": confirmation_id,
+                "user_response": user_response
+            }
+        except asyncio.TimeoutError:
+            logger.warning(f"用户确认超时: confirmation_id={confirmation_id}")
+            # 清理 future
+            if confirmation_id in user_confirmation_futures:
+                del user_confirmation_futures[confirmation_id]
+            
+            return {
+                "status": "error", 
+                "message": "用户确认超时",
+                "confirmation_id": confirmation_id
+            }
+        
+    except Exception as e:
+        logger.error(f"请求用户确认时发生错误: {str(e)}")
+        return {"status": "error", "message": f"请求用户确认失败: {str(e)}"}
+
+def resolve_user_confirmation(confirmation_id: str, response: Dict[str, Any]):
+    """
+    解决用户确认请求，设置 future 的结果
+    
+    Args:
+        confirmation_id: 确认请求ID
+        response: 用户响应数据
+    """
+    if confirmation_id in user_confirmation_futures:
+        future = user_confirmation_futures[confirmation_id]
+        if not future.done():
+            future.set_result(response)
+        return True
+    return False
 
 @tool
 def add_tasks(tasks: List[Dict[str, Any]]) -> Dict[str, Any]:

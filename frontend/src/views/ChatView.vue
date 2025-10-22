@@ -70,7 +70,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch, nextTick, h } from 'vue'
 import { useRouter } from 'vue-router'
 import { useSessionStore } from '../stores/session'
 import { useUserStore } from '../stores/user'
@@ -121,7 +121,7 @@ onMounted(() => {
     return
   }
 
-  // 初始化滚动监听器
+  // 初始化滚动管理器
   scrollManager.initScrollListener()
 
   // 检查是否选择了会话
@@ -131,11 +131,218 @@ onMounted(() => {
 
   // 初始加载时强制滚动到底部
   scrollManager.scrollTo(SCROLL_SCENARIOS.FORCE, { delay: 200 })
+  
+  // 初始化WebSocket连接
+  initWebSocket()
 })
 
 // 组件卸载时清理资源
 onUnmounted(() => {
   scrollManager.cleanup()
+  closeWebSocket()
+})
+
+// WebSocket相关状态
+const websocket = ref(null)
+const websocketUrl = ref('')
+
+// 初始化WebSocket连接
+const initWebSocket = () => {
+  if (!sessionStore.sessionId) return
+  
+  // 构造WebSocket URL
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+  const host = window.location.host
+  websocketUrl.value = `${protocol}//${host}/api/tasks/ws/${sessionStore.sessionId}`
+  
+  // 创建WebSocket连接
+  websocket.value = new WebSocket(websocketUrl.value)
+  
+  // 设置事件处理程序
+  websocket.value.onopen = handleWebSocketOpen
+  websocket.value.onmessage = handleWebSocketMessage
+  websocket.value.onclose = handleWebSocketClose
+  websocket.value.onerror = handleWebSocketError
+}
+
+// 处理WebSocket连接打开
+const handleWebSocketOpen = (event) => {
+  console.log('WebSocket连接已建立:', websocketUrl.value)
+  
+  // 发送心跳消息以保持连接
+  const heartbeatInterval = setInterval(() => {
+    if (websocket.value && websocket.value.readyState === WebSocket.OPEN) {
+      websocket.value.send(JSON.stringify({ type: 'heartbeat' }))
+    }
+  }, 30000) // 每30秒发送一次心跳
+  
+  // 保存定时器ID以便后续清理
+  websocket.value.heartbeatInterval = heartbeatInterval
+}
+
+// 处理WebSocket消息
+const handleWebSocketMessage = (event) => {
+  try {
+    const data = JSON.parse(event.data)
+    console.log('收到WebSocket消息:', data)
+    
+    // 根据消息类型处理
+    switch (data.type) {
+      case 'task_update':
+        // 任务更新通知
+        console.log('收到任务更新通知:', data)
+        break
+        
+      case 'user_confirmation_request':
+        // 用户确认请求
+        handleUserConfirmationRequest(data)
+        break
+        
+      case 'heartbeat_ack':
+        // 心跳响应
+        console.log('收到心跳响应')
+        break
+        
+      case 'connected':
+        // 连接确认
+        console.log('WebSocket连接确认:', data)
+        break
+        
+      default:
+        console.log('未知消息类型:', data.type)
+    }
+  } catch (error) {
+    console.error('解析WebSocket消息失败:', error, event.data)
+  }
+}
+
+// 处理用户确认请求
+const handleUserConfirmationRequest = (data) => {
+  // 显示确认对话框
+  const { confirmation_id, title, message, options, default_value } = data
+  
+  // 创建确认对话框配置
+  const dialogOptions = {
+    title: title || '请确认',
+    content: message || '请确认操作',
+    positiveText: '确认',
+    negativeText: '取消',
+    onPositiveClick: () => {
+      // 用户点击确认
+      handleUserConfirmationResponse(confirmation_id, 'confirmed', null)
+    },
+    onNegativeClick: () => {
+      // 用户点击取消
+      handleUserConfirmationResponse(confirmation_id, 'cancelled', null)
+    }
+  }
+  
+  // 如果有选项，则显示选择框
+  if (options && Array.isArray(options) && options.length > 0) {
+    dialogOptions.content = () => h('div', [
+      h('p', message || '请选择一个选项'),
+      h('n-select', {
+        defaultValue: default_value,
+        options: options.map(option => ({
+          label: option,
+          value: option
+        })),
+        'onUpdate:value': (value) => {
+          // 保存用户选择的值
+          dialogOptions.selectedValue = value
+        }
+      })
+    ])
+    
+    // 修改确认按钮的处理函数
+    const originalPositiveClick = dialogOptions.onPositiveClick
+    dialogOptions.onPositiveClick = () => {
+      // 传递用户选择的值
+      handleUserConfirmationResponse(
+        confirmation_id, 
+        'confirmed', 
+        dialogOptions.selectedValue
+      )
+      originalPositiveClick()
+    }
+  }
+  
+  // 显示对话框
+  const { dialog } = createDiscreteApi(['dialog'])
+  dialog[options && options.length > 0 ? 'info' : 'warning'](dialogOptions)
+}
+
+// 发送用户确认响应
+const handleUserConfirmationResponse = (confirmationId, status, value) => {
+  // 发送用户响应到后端
+  if (websocket.value && websocket.value.readyState === WebSocket.OPEN) {
+    const response = {
+      type: 'user_confirmation_response',
+      confirmation_id: confirmationId,
+      status: status, // 'confirmed' 或 'cancelled'
+      value: value, // 用户选择的值（如果有）
+      timestamp: new Date().toISOString()
+    }
+    
+    websocket.value.send(JSON.stringify(response))
+    console.log('已发送用户确认响应:', response)
+  }
+}
+
+// 处理WebSocket连接关闭
+const handleWebSocketClose = (event) => {
+  console.log('WebSocket连接已关闭:', event)
+  
+  // 清理心跳定时器
+  if (websocket.value && websocket.value.heartbeatInterval) {
+    clearInterval(websocket.value.heartbeatInterval)
+  }
+  
+  // 尝试重新连接（可选）
+  // setTimeout(initWebSocket, 5000)
+}
+
+// 处理WebSocket错误
+const handleWebSocketError = (event) => {
+  console.error('WebSocket错误:', event)
+  
+  // 清理心跳定时器
+  if (websocket.value && websocket.value.heartbeatInterval) {
+    clearInterval(websocket.value.heartbeatInterval)
+  }
+}
+
+// 关闭WebSocket连接
+const closeWebSocket = () => {
+  if (websocket.value) {
+    // 清理心跳定时器
+    if (websocket.value.heartbeatInterval) {
+      clearInterval(websocket.value.heartbeatInterval)
+    }
+    
+    // 关闭连接
+    if (websocket.value.readyState === WebSocket.OPEN) {
+      websocket.value.close()
+    }
+    
+    websocket.value = null
+  }
+}
+
+// 监听会话ID变化，切换会话时重新连接WebSocket
+watch(() => sessionStore.sessionId, (newSessionId, oldSessionId) => {
+  if (newSessionId && newSessionId !== oldSessionId) {
+    // 关闭旧连接
+    closeWebSocket()
+    
+    // 建立新连接
+    nextTick(() => {
+      initWebSocket()
+      
+      // 会话切换时强制滚动到底部
+      scrollManager.scrollTo(SCROLL_SCENARIOS.FORCE, { delay: 150 })
+    })
+  }
 })
 
 // 监听消息数量变化
