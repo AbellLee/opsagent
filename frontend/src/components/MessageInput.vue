@@ -18,18 +18,36 @@
         <!-- 发送按钮 -->
         <div class="send-button-wrapper">
           <n-button
+            v-if="!sending"
             type="primary"
             circle
             size="medium"
             @click="sendMessage"
             :disabled="isSendDisabled"
-            :loading="sending"
             class="send-button"
           >
             <template #icon>
               <n-icon size="18">
                 <svg viewBox="0 0 24 24" fill="currentColor">
                   <path d="M2,21L23,12L2,3V10L17,12L2,14V21Z"/>
+                </svg>
+              </n-icon>
+            </template>
+          </n-button>
+          
+          <!-- 中断按钮 -->
+          <n-button
+            v-else
+            type="error"
+            circle
+            size="medium"
+            @click="interruptMessage"
+            class="send-button interrupt-button"
+          >
+            <template #icon>
+              <n-icon size="18">
+                <svg viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M18,18H6V6H18V18Z"/>
                 </svg>
               </n-icon>
             </template>
@@ -81,7 +99,7 @@
 <script setup>
 import { ref, computed, onMounted, nextTick } from 'vue'
 import { useSessionStore } from '../stores/session'
-import { messageAPI } from '../api'
+import { messageAPI, interruptAPI } from '../api'
 import { createDiscreteApi } from 'naive-ui'
 
 // Constants
@@ -177,6 +195,18 @@ const sendMessage = async () => {
   }
 }
 
+// 中断消息处理
+const interruptMessage = async () => {
+  try {
+    await interruptAPI.interrupt(sessionStore.sessionId, "用户主动中断对话");
+    sending.value = false;
+    notification.info("已发送中断请求");
+  } catch (error) {
+    console.error("中断请求失败:", error);
+    notification.error("中断请求失败");
+  }
+}
+
 // 阻塞模式发送消息
 const sendBlockingMessage = async (messageContent) => {
   const response = await messageAPI.send(sessionStore.sessionId, {
@@ -242,6 +272,13 @@ const sendStreamingMessage = async (messageContent) => {
             if (done) {
               resolve()
               break
+            }
+
+            // 检查是否仍在发送状态，如果不是则中断
+            if (!sending.value) {
+              reader.cancel();
+              resolve();
+              break;
             }
 
             const chunk = decoder.decode(value, { stream: true })
@@ -349,10 +386,11 @@ const sendStreamingMessage = async (messageContent) => {
                             // 兼容旧格式：字符串内容
                             currentAIMessage.content += chunkData.chunk
                           }
+                          // 更新消息
                           sessionStore.messages[currentMessageIndex] = { ...currentAIMessage }
                         }
                       } else {
-                        // 创建新的AI消息（没有工具调用的情况）
+                        // 创建新的AI消息（纯文本回复）
                         const textEntry = {
                           type: 'text',
                           content: chunkData.chunk || '',
@@ -507,6 +545,22 @@ onMounted(() => {
     0 8px 16px rgba(102, 126, 234, 0.4),
     0 4px 8px rgba(0, 0, 0, 0.15);
   background: linear-gradient(135deg, #5a67d8 0%, #6b46c1 100%);
+}
+
+.interrupt-button {
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4);
+  }
+  70% {
+    box-shadow: 0 0 0 10px rgba(239, 68, 68, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
+  }
 }
 
 .send-button:disabled {

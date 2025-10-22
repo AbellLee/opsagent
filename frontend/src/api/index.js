@@ -164,3 +164,9 @@ export const taskAPI = {
   update: (taskId, taskData) => apiClient.put(`/tasks/${taskId}`, taskData),
   get: (taskId) => apiClient.get(`/tasks/${taskId}`)
 }
+
+// 中断相关 API
+export const interruptAPI = {
+  interrupt: (sessionId, reason = "User requested interrupt") => 
+    apiClient.post(`/sessions/${sessionId}/interrupt`, { reason })
+}

@@ -8,6 +8,7 @@ from langchain_core.runnables import RunnableConfig
 from app.core.logger import logger
 from app.agent.state import AgentState
 from app.core.llm import get_llm, LLMInitializationError
+from langgraph.types import interrupt
 
 
 # ========================
@@ -24,6 +25,20 @@ def create_call_model_with_tools(tools: List[BaseTool]):
     ) -> Dict[str, Any]:
         """调用模型 - 支持工具调用和流式输出（异步版本）"""
         try:
+            # 检查是否有中断请求
+            thread_id = config.get("configurable", {}).get("thread_id")
+            if thread_id:
+                # 将导入移到函数内部以避免循环导入
+                from app.services.agent.interrupt_service import get_interrupt_service
+                interrupt_service = get_interrupt_service()
+                if interrupt_service.check_interrupt_requested(thread_id):
+                    reason = interrupt_service.get_interrupt_reason(thread_id)
+                    logger.info(f"检测到中断请求，中断对话: session_id={thread_id}, reason={reason}")
+                    # 清除中断状态
+                    interrupt_service.clear_interrupt(thread_id)
+                    # 触发中断
+                    interrupt(f"用户中断了对话: {reason}")
+
             # 构建系统消息（支持长期记忆）
             system_msg = "你是一个智能助手"
             if store and "user_id" in config.get("configurable", {}):
@@ -38,6 +53,7 @@ def create_call_model_with_tools(tools: List[BaseTool]):
                 llm, _ = get_llm()
             except LLMInitializationError as e:
                 logger.error(f"LLM初始化失败: {e}")
+                # 即使LLM初始化失败，也要返回状态，确保中断时能看到部分结果
                 return {"messages": [AIMessage(content=f"模型初始化失败: {str(e)}")]}
 
             # 绑定工具到模型
@@ -61,13 +77,49 @@ def create_call_model_with_tools(tools: List[BaseTool]):
                 logger.info("检测到流式上下文，使用异步流式调用")
 
                 full_response = None
-                async for chunk in model_with_tools.astream(messages):
-                    # LangGraph 的 writer 是同步可调用的
-                    writer(chunk)
-                    full_response = chunk if full_response is None else full_response + chunk
+                accumulated_content = ""
+                try:
+                    async for chunk in model_with_tools.astream(messages):
+                        # 检查是否有中断请求（在流式输出过程中）
+                        if thread_id:
+                            # 将导入移到函数内部以避免循环导入
+                            from app.services.agent.interrupt_service import get_interrupt_service
+                            interrupt_service = get_interrupt_service()
+                            if interrupt_service.check_interrupt_requested(thread_id):
+                                reason = interrupt_service.get_interrupt_reason(thread_id)
+                                logger.info(f"检测到中断请求，中断流式输出: session_id={thread_id}, reason={reason}")
+                                
+                                # 在中断前，将已累积的内容作为最终消息
+                                if accumulated_content:
+                                    ai_message = AIMessage(content=accumulated_content)
+                                    # 清除中断状态
+                                    interrupt_service.clear_interrupt(thread_id)
+                                    # 返回已累积的内容
+                                    return {"messages": [ai_message]}
+                                
+                                # 清除中断状态
+                                interrupt_service.clear_interrupt(thread_id)
+                                # 触发中断
+                                interrupt(f"用户中断了对话: {reason}")
 
-                ai_message = full_response
-                logger.info("异步流式模型调用成功")
+                        # LangGraph 的 writer 是同步可调用的
+                        writer(chunk)
+                        full_response = chunk if full_response is None else full_response + chunk
+                        
+                        # 累积内容
+                        if hasattr(chunk, 'content'):
+                            accumulated_content += chunk.content
+
+                    ai_message = full_response
+                    logger.info("异步流式模型调用成功")
+
+                except Exception as stream_error:
+                    # 如果在流式传输过程中发生中断或其他错误，但已有累积内容，则返回它
+                    if accumulated_content:
+                        logger.info("流式传输过程中发生错误，但已有累积内容，返回累积内容")
+                        ai_message = AIMessage(content=accumulated_content)
+                    else:
+                        raise stream_error
 
             except Exception as stream_error:
                 # 回退到异步普通调用
