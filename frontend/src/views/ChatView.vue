@@ -66,6 +66,14 @@
         <TaskList :session-id="sessionStore.sessionId" />
       </div>
     </div>
+    
+    <!-- 用户确认对话框 -->
+    <UserConfirmationDialog
+      v-model:show="showConfirmationDialog"
+      :data="confirmationData"
+      @confirm="handleConfirmationResponse"
+      @cancel="handleConfirmationCancel"
+    />
   </div>
 </template>
 
@@ -79,7 +87,9 @@ import { messageAPI } from '../api'
 import ChatMessage from '../components/ChatMessage.vue'
 import MessageInput from '../components/MessageInput.vue'
 import TaskList from '../components/TaskList.vue'
+import UserConfirmationDialog from '../components/UserConfirmationDialog.vue'
 import { useScrollManager, SCROLL_SCENARIOS } from '../composables/useScrollManager'
+import { marked } from 'marked'
 
 const { message } = createDiscreteApi(['message'])
 const router = useRouter()
@@ -90,6 +100,8 @@ const userStore = useUserStore()
 const messagesContainer = ref(null)
 const isLastMessageStreaming = ref(false)
 const isTaskPanelCollapsed = ref(false)
+const showConfirmationDialog = ref(false)
+const confirmationData = ref({})
 
 // 初始化滚动管理器
 const scrollManager = useScrollManager(messagesContainer)
@@ -218,58 +230,23 @@ const handleWebSocketMessage = (event) => {
 
 // 处理用户确认请求
 const handleUserConfirmationRequest = (data) => {
-  // 显示确认对话框
-  const { confirmation_id, title, message, options, default_value } = data
-  
-  // 创建确认对话框配置
-  const dialogOptions = {
-    title: title || '请确认',
-    content: message || '请确认操作',
-    positiveText: '确认',
-    negativeText: '取消',
-    onPositiveClick: () => {
-      // 用户点击确认
-      handleUserConfirmationResponse(confirmation_id, 'confirmed', null)
-    },
-    onNegativeClick: () => {
-      // 用户点击取消
-      handleUserConfirmationResponse(confirmation_id, 'cancelled', null)
-    }
-  }
-  
-  // 如果有选项，则显示选择框
-  if (options && Array.isArray(options) && options.length > 0) {
-    dialogOptions.content = () => h('div', [
-      h('p', message || '请选择一个选项'),
-      h('n-select', {
-        defaultValue: default_value,
-        options: options.map(option => ({
-          label: option,
-          value: option
-        })),
-        'onUpdate:value': (value) => {
-          // 保存用户选择的值
-          dialogOptions.selectedValue = value
-        }
-      })
-    ])
-    
-    // 修改确认按钮的处理函数
-    const originalPositiveClick = dialogOptions.onPositiveClick
-    dialogOptions.onPositiveClick = () => {
-      // 传递用户选择的值
-      handleUserConfirmationResponse(
-        confirmation_id, 
-        'confirmed', 
-        dialogOptions.selectedValue
-      )
-      originalPositiveClick()
-    }
-  }
-  
-  // 显示对话框
-  const { dialog } = createDiscreteApi(['dialog'])
-  dialog[options && options.length > 0 ? 'info' : 'warning'](dialogOptions)
+  // 提取实际的确认数据（payload）
+  confirmationData.value = data.payload || data
+  showConfirmationDialog.value = true
+}
+
+const handleConfirmationResponse = (response) => {
+  const { confirmation_id } = confirmationData.value
+  handleUserConfirmationResponse(confirmation_id, response.status, response.value)
+  showConfirmationDialog.value = false
+  confirmationData.value = {}
+}
+
+const handleConfirmationCancel = () => {
+  const { confirmation_id } = confirmationData.value
+  handleUserConfirmationResponse(confirmation_id, 'cancelled', null)
+  showConfirmationDialog.value = false
+  confirmationData.value = {}
 }
 
 // 发送用户确认响应
@@ -432,6 +409,65 @@ const sendExample = async () => {
 </script>
 
 <style scoped>
+/* 引入markdown样式 */
+@import 'github-markdown-css/github-markdown.css';
+
+.markdown-body {
+  background-color: transparent !important;
+  color: inherit !important;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.markdown-body :deep(h1),
+.markdown-body :deep(h2),
+.markdown-body :deep(h3) {
+  margin-top: 1em;
+  margin-bottom: 0.5em;
+}
+
+.markdown-body :deep(p) {
+  margin-top: 0.5em;
+  margin-bottom: 0.5em;
+}
+
+.markdown-body :deep(ul),
+.markdown-body :deep(ol) {
+  margin-top: 0.5em;
+  margin-bottom: 0.5em;
+  padding-left: 1.5em;
+}
+
+.markdown-body :deep(li) {
+  margin-bottom: 0.25em;
+}
+
+.markdown-body :deep(code) {
+  background-color: rgba(175, 184, 193, 0.2);
+  padding: 0.2em 0.4em;
+  border-radius: 6px;
+  font-size: 0.85em;
+}
+
+.markdown-body :deep(pre) {
+  background-color: rgba(175, 184, 193, 0.2);
+  padding: 1em;
+  border-radius: 6px;
+  overflow: auto;
+}
+
+.markdown-body :deep(pre code) {
+  background-color: transparent;
+  padding: 0;
+}
+
+.markdown-body :deep(blockquote) {
+  margin: 0;
+  padding: 0 1em;
+  color: #6a737d;
+  border-left: 0.25em solid #dfe2e5;
+}
+
 .chat-view-container {
   height: 100%;
   width: 100%;
