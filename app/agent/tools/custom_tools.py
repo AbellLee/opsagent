@@ -126,25 +126,19 @@ def _send_user_confirmation_request(session_id: str, confirmation_data: Dict[str
     
     async def _send_impl():
         if session_id_str in websocket_connections:
-            # 向所有WebSocket连接发送用户确认请求消息
-            disconnected_connections = []
-            success_count = 0
-            for websocket in websocket_connections[session_id_str]:
-                try:
-                    # 发送用户确认请求消息
-                    await websocket.send_text(json.dumps(confirmation_data))
-                    success_count += 1
-                except Exception as e:
-                    logger.error(f"向WebSocket发送用户确认请求失败: {e}", exc_info=True)
-                    disconnected_connections.append(websocket)
-            
-            # 清理断开的连接
-            for websocket in disconnected_connections:
-                if websocket in websocket_connections[session_id_str]:
-                    websocket_connections[session_id_str].remove(websocket)
-            
-            logger.info(f"已向 {success_count} 个客户端发送用户确认请求，{len(disconnected_connections)} 个连接已断开")
-            return success_count > 0  # 只要有一个连接成功发送就返回True
+            # 获取WebSocket连接
+            websocket = websocket_connections[session_id_str]
+            try:
+                # 发送用户确认请求消息
+                await websocket.send_text(json.dumps(confirmation_data))
+                logger.info(f"已向会话 {session_id_str} 发送用户确认请求")
+                return True
+            except Exception as e:
+                logger.error(f"向WebSocket发送用户确认请求失败: {e}", exc_info=True)
+                # 从连接池中移除已断开的连接
+                if session_id_str in websocket_connections:
+                    del websocket_connections[session_id_str]
+                return False
         else:
             logger.info(f"会话 {session_id_str} 没有活跃的WebSocket连接")
             return False

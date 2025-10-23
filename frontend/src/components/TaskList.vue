@@ -47,10 +47,11 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted, watch, computed } from 'vue'
+import { ref, onMounted, onUnmounted, watch, computed, onBeforeUnmount } from 'vue'
 import { NButton, NIcon, NScrollbar, NEmpty, NTag } from 'naive-ui'
 import { taskAPI } from '../api'
 import TaskItem from './TaskItem.vue'
+import { useSessionStore } from '../stores/session'
 
 const props = defineProps({
   sessionId: {
@@ -79,11 +80,8 @@ const TASK_STATUS_TYPE = {
 // 响应式数据
 const tasks = ref([])
 const loading = ref(false)
-const websocket = ref(null)
-const reconnectAttempts = ref(0)
-const maxReconnectAttempts = ref(5)
-const reconnectDelay = ref(1000)
-const heartbeatInterval = ref(null)
+const sessionStore = useSessionStore()
+let taskUpdateHandler = null
 
 // 计算根任务（没有父任务的任务）
 const rootTasks = computed(() => {
@@ -128,46 +126,13 @@ const refreshTasks = async () => {
   }
 }
 
-// 发送心跳包
-const sendHeartbeat = () => {
-  if (websocket.value && websocket.value.readyState === WebSocket.OPEN) {
-    websocket.value.send(JSON.stringify({ type: 'heartbeat' }))
-  }
-}
-
-// 初始化WebSocket连接
-const initWebSocket = () => {
-  if (!props.sessionId) return
-
-  // 关闭现有的连接和心跳
-  if (websocket.value) {
-    websocket.value.close()
-  }
-  
-  if (heartbeatInterval.value) {
-    clearInterval(heartbeatInterval.value)
-    heartbeatInterval.value = null
-  }
-
-  // 创建新的WebSocket连接
-  const protocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://'
-  const wsUrl = `${protocol}${window.location.host}/api/tasks/ws/${props.sessionId}`
-  websocket.value = new WebSocket(wsUrl)
-
-  websocket.value.onopen = () => {
-    console.log('任务WebSocket连接已建立')
-    // 重置重连尝试次数
-    reconnectAttempts.value = 0
-    
-    // 启动心跳机制
-    heartbeatInterval.value = setInterval(sendHeartbeat, 25000) // 每25秒发送一次心跳
-  }
-
-  websocket.value.onmessage = (event) => {
+// 通过全局事件监听任务更新
+const initTaskUpdateListener = () => {
+  // 定义任务更新处理函数
+  taskUpdateHandler = (event) => {
     try {
       const data = JSON.parse(event.data)
-      console.log('收到WebSocket消息:', data)
-      if (data.type === 'task_update') {
+      if (data.type === 'task_update' && data.session_id === props.sessionId) {
         // 更新任务列表
         console.log('收到任务更新通知，正在刷新任务列表...')
         refreshTasks()
@@ -176,50 +141,29 @@ const initWebSocket = () => {
       console.error('解析WebSocket消息失败:', error)
     }
   }
-
-  websocket.value.onerror = (error) => {
-    console.error('任务WebSocket连接错误:', error)
-  }
-
-  websocket.value.onclose = (event) => {
-    console.log('任务WebSocket连接已关闭:', event.code, event.reason)
-    
-    // 清理心跳机制
-    if (heartbeatInterval.value) {
-      clearInterval(heartbeatInterval.value)
-      heartbeatInterval.value = null
-    }
-    
-    // 实现重连机制
-    // 只有当session_id没有变化时才尝试重连
-    const currentSessionId = props.sessionId;
-    if (reconnectAttempts.value < maxReconnectAttempts.value) {
-      reconnectAttempts.value++
-      console.log(`尝试重新连接 (${reconnectAttempts.value}/${maxReconnectAttempts.value})...`)
-      setTimeout(() => {
-        // 检查session_id是否发生变化
-        if (props.sessionId === currentSessionId) {
-          initWebSocket()
-        } else {
-          console.log('会话已切换，取消重连')
-        }
-      }, reconnectDelay.value * reconnectAttempts.value) // 逐渐增加延迟
-    } else {
-      console.log('达到最大重连次数，停止重连')
-    }
+  
+  // 添加事件监听器
+  if (sessionStore.websocket) {
+    sessionStore.websocket.addEventListener('message', taskUpdateHandler)
   }
 }
 
-// 关闭WebSocket连接
-const closeWebSocket = () => {
-  if (websocket.value) {
-    websocket.value.close()
-    websocket.value = null
+// 移除任务更新监听器
+const removeTaskUpdateListener = () => {
+  if (taskUpdateHandler && sessionStore.websocket) {
+    sessionStore.websocket.removeEventListener('message', taskUpdateHandler)
+    taskUpdateHandler = null
   }
-  
-  if (heartbeatInterval.value) {
-    clearInterval(heartbeatInterval.value)
-    heartbeatInterval.value = null
+}
+
+// 监听WebSocket连接事件
+const handleWebsocketConnected = (event) => {
+  // 确保是当前会话的连接
+  if (event.detail.sessionId === props.sessionId) {
+    // 移除旧的监听器
+    removeTaskUpdateListener()
+    // 初始化新的任务更新监听器
+    initTaskUpdateListener()
   }
 }
 
@@ -227,21 +171,34 @@ const closeWebSocket = () => {
 watch(() => props.sessionId, (newSessionId) => {
   if (newSessionId) {
     refreshTasks()
-    initWebSocket()
+    // 移除旧的监听器
+    removeTaskUpdateListener()
+    // 初始化新的任务更新监听器（如果WebSocket已存在）
+    if (sessionStore.websocket) {
+      initTaskUpdateListener()
+    }
   } else {
-    closeWebSocket()
+    removeTaskUpdateListener()
   }
 })
 
 onMounted(() => {
   if (props.sessionId) {
     refreshTasks()
-    initWebSocket()
+    // 初始化任务更新监听器（如果WebSocket已存在）
+    if (sessionStore.websocket) {
+      initTaskUpdateListener()
+    }
+    // 添加WebSocket连接事件监听器
+    window.addEventListener('websocket-connected', handleWebsocketConnected)
   }
 })
 
 onUnmounted(() => {
-  closeWebSocket()
+  // 移除任务更新监听器
+  removeTaskUpdateListener()
+  // 移除WebSocket连接事件监听器
+  window.removeEventListener('websocket-connected', handleWebsocketConnected)
 })
 </script>
 

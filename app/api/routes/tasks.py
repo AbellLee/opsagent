@@ -5,14 +5,19 @@ from app.core.logger import logger
 import json
 import asyncio
 from fastapi.responses import StreamingResponse
+from datetime import datetime
 
 router = APIRouter(prefix="/api/tasks", tags=["tasks"])
 
 # 存储WebSocket连接
-websocket_connections: Dict[str, List[WebSocket]] = {}
+# 修改为每个会话只保持一个WebSocket连接
+websocket_connections: Dict[str, WebSocket] = {}
+
+# 存储连接状态信息
+connection_status: Dict[str, dict] = {}
 
 # 导出 websocket_connections 供其他模块使用
-__all__ = ["router", "notify_task_update", "websocket_connections"]
+__all__ = ["router", "notify_task_update", "websocket_connections", "connection_status"]
 
 async def notify_task_update(session_id: str):
     """通知指定会话的任务更新"""
@@ -20,26 +25,26 @@ async def notify_task_update(session_id: str):
     logger.info(f"准备通知任务更新: session_id={session_id_str}")
     
     if session_id_str in websocket_connections:
-        # 向所有WebSocket连接发送更新消息
-        disconnected_connections = []
-        for websocket in websocket_connections[session_id_str]:
-            try:
-                await websocket.send_text(json.dumps({
-                    "type": "task_update", 
-                    "session_id": session_id_str
-                }))
-            except WebSocketDisconnect:
-                disconnected_connections.append(websocket)
-            except Exception as e:
-                logger.error(f"向WebSocket发送消息失败: {e}", exc_info=True)
-                disconnected_connections.append(websocket)
+        # 更新连接状态
+        if session_id_str in connection_status:
+            connection_status[session_id_str]["last_activity"] = datetime.now().isoformat()
         
-        # 清理断开的连接
-        for websocket in disconnected_connections:
-            if websocket in websocket_connections[session_id_str]:
-                websocket_connections[session_id_str].remove(websocket)
-        
-        logger.info(f"已向 {len(websocket_connections[session_id_str])} 个客户端发送任务更新通知")
+        # 向WebSocket连接发送更新消息
+        try:
+            await websocket_connections[session_id_str].send_text(json.dumps({
+                "type": "task_update", 
+                "session_id": session_id_str
+            }))
+            logger.info(f"已向会话 {session_id_str} 发送任务更新通知")
+        except WebSocketDisconnect:
+            # 连接已断开，清理连接
+            del websocket_connections[session_id_str]
+            if session_id_str in connection_status:
+                connection_status[session_id_str]["state"] = "disconnected"
+                connection_status[session_id_str]["disconnected_at"] = datetime.now().isoformat()
+            logger.info(f"WebSocket连接已断开并清理: session_id={session_id_str}")
+        except Exception as e:
+            logger.error(f"向WebSocket发送消息失败: {e}", exc_info=True)
     else:
         logger.info(f"会话 {session_id_str} 没有活跃的WebSocket连接")
 
@@ -48,15 +53,26 @@ async def websocket_tasks(websocket: WebSocket, session_id: UUID):
     """任务WebSocket端点"""
     session_id_str = str(session_id)
     
+    # 如果会话已有连接，先关闭旧连接
+    if session_id_str in websocket_connections:
+        try:
+            await websocket_connections[session_id_str].close()
+            del websocket_connections[session_id_str]
+            logger.info(f"已关闭会话 {session_id_str} 的旧WebSocket连接")
+        except Exception as e:
+            logger.error(f"关闭旧WebSocket连接失败: {e}", exc_info=True)
+    
     # 接受WebSocket连接
     await websocket.accept()
     
-    # 将连接添加到会话连接列表中
-    if session_id_str not in websocket_connections:
-        websocket_connections[session_id_str] = []
-    
-    websocket_connections[session_id_str].append(websocket)
-    logger.info(f"任务WebSocket连接已建立: session_id={session_id_str}, 当前连接数={len(websocket_connections[session_id_str])}")
+    # 将连接存储到会话中（每个会话只保持一个连接）
+    websocket_connections[session_id_str] = websocket
+    connection_status[session_id_str] = {
+        "connected_at": datetime.now().isoformat(),
+        "client": websocket.client,
+        "state": "connected"
+    }
+    logger.info(f"任务WebSocket连接已建立: session_id={session_id_str}")
     
     try:
         # 发送初始连接确认消息
@@ -96,12 +112,12 @@ async def websocket_tasks(websocket: WebSocket, session_id: UUID):
         logger.error(f"任务WebSocket连接异常: session_id={session_id_str}, error={e}")
     finally:
         # 清理连接
-        if session_id_str in websocket_connections and websocket in websocket_connections[session_id_str]:
-            websocket_connections[session_id_str].remove(websocket)
-            logger.info(f"WebSocket连接已关闭: session_id={session_id_str}, 剩余连接数={len(websocket_connections.get(session_id_str, []))}")
-            # 如果没有客户端连接了，清理该会话的条目
-            if not websocket_connections[session_id_str]:
-                del websocket_connections[session_id_str]
+        if session_id_str in websocket_connections and websocket_connections[session_id_str] == websocket:
+            del websocket_connections[session_id_str]
+            if session_id_str in connection_status:
+                connection_status[session_id_str]["state"] = "disconnected"
+                connection_status[session_id_str]["disconnected_at"] = datetime.now().isoformat()
+            logger.info(f"WebSocket连接已关闭: session_id={session_id_str}")
 
 # 导出通知函数供其他模块使用
 __all__ = ["router", "notify_task_update"]

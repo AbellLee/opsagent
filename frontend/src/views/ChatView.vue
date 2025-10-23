@@ -181,6 +181,14 @@ const initWebSocket = () => {
 const handleWebSocketOpen = (event) => {
   console.log('WebSocket连接已建立:', websocketUrl.value)
   
+  // 将WebSocket连接存储到sessionStore中
+  sessionStore.setWebsocket(websocket.value)
+  
+  // 发送全局事件通知TaskList.vue组件WebSocket已连接
+  window.dispatchEvent(new CustomEvent('websocket-connected', {
+    detail: { sessionId: sessionStore.sessionId }
+  }))
+  
   // 发送心跳消息以保持连接
   const heartbeatInterval = setInterval(() => {
     if (websocket.value && websocket.value.readyState === WebSocket.OPEN) {
@@ -270,6 +278,9 @@ const handleUserConfirmationResponse = (confirmationId, status, value) => {
 const handleWebSocketClose = (event) => {
   console.log('WebSocket连接已关闭:', event)
   
+  // 清理sessionStore中的WebSocket引用
+  sessionStore.clearWebsocket()
+  
   // 清理心跳定时器
   if (websocket.value && websocket.value.heartbeatInterval) {
     clearInterval(websocket.value.heartbeatInterval)
@@ -283,6 +294,9 @@ const handleWebSocketClose = (event) => {
 const handleWebSocketError = (event) => {
   console.error('WebSocket错误:', event)
   
+  // 清理sessionStore中的WebSocket引用
+  sessionStore.clearWebsocket()
+  
   // 清理心跳定时器
   if (websocket.value && websocket.value.heartbeatInterval) {
     clearInterval(websocket.value.heartbeatInterval)
@@ -292,6 +306,9 @@ const handleWebSocketError = (event) => {
 // 关闭WebSocket连接
 const closeWebSocket = () => {
   if (websocket.value) {
+    // 清理sessionStore中的WebSocket引用
+    sessionStore.clearWebsocket()
+    
     // 清理心跳定时器
     if (websocket.value.heartbeatInterval) {
       clearInterval(websocket.value.heartbeatInterval)

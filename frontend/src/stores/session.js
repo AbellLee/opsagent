@@ -4,7 +4,8 @@ export const useSessionStore = defineStore('session', {
   state: () => ({
     sessions: [],
     sessionId: null,
-    messages: []
+    messages: [],
+    websocket: null // 添加WebSocket引用
   }),
   
   actions: {
@@ -55,10 +56,21 @@ export const useSessionStore = defineStore('session', {
       }
     },
     
+    // 设置WebSocket连接
+    setWebsocket(websocket) {
+      this.websocket = websocket
+    },
+    
+    // 移除WebSocket连接
+    clearWebsocket() {
+      this.websocket = null
+    },
+    
     resetSession() {
       this.sessions = []
       this.sessionId = null
       this.messages = []
+      this.websocket = null
     }
   }
 })
