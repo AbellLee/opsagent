@@ -162,26 +162,10 @@ async def request_user_confirmation(
         
         # 如果没有从上下文获取到，则返回错误
         if not user_id:
-            return {
-                "user_input": None,
-                "selected_options": [],
-                "metadata": {
-                    "error": "User ID not found in context",
-                    "timestamp": datetime.now().isoformat(),
-                    "source": "user_confirmation_tool"
-                }
-            }
+            return "获取用户ID失败"
             
         if not session_id:
-            return {
-                "user_input": None,
-                "selected_options": [],
-                "metadata": {
-                    "error": "Session ID not found in context",
-                    "timestamp": datetime.now().isoformat(),
-                    "source": "user_confirmation_tool"
-                }
-            }
+            return "获取会话ID失败"
 
         # 生成确认请求ID
         confirmation_id = str(uuid4())
@@ -214,32 +198,14 @@ async def request_user_confirmation(
                 if confirmation_id in user_confirmation_futures:
                     del user_confirmation_futures[confirmation_id]
                     
-                return {
-                    "user_input": None,
-                    "selected_options": [],
-                    "metadata": {
-                        "error": "发送确认请求失败：没有可用的WebSocket连接",
-                        "timestamp": datetime.now().isoformat(),
-                        "confirmation_id": confirmation_id,
-                        "source": "user_confirmation_tool"
-                    }
-                }
-            logger.info(f"已发送用户确认请求: confirmation_id={confirmation_id}")
+                return "发送确认请求失败：没有可用的WebSocket连接"
         except Exception as e:
             logger.error(f"发送用户确认请求失败: {e}", exc_info=True)
             # 清理future
             if confirmation_id in user_confirmation_futures:
                 del user_confirmation_futures[confirmation_id]
                 
-            return {
-                "user_input": None,
-                "selected_options": [],
-                "metadata": {
-                    "error": f"发送确认请求失败: {str(e)}",
-                    "timestamp": datetime.now().isoformat(),
-                    "source": "user_confirmation_tool"
-                }
-            }
+            return f"发送确认请求失败: {str(e)}"
 
         # 等待用户响应（设置超时时间）
         try:
@@ -250,45 +216,48 @@ async def request_user_confirmation(
             if confirmation_id in user_confirmation_futures:
                 del user_confirmation_futures[confirmation_id]
             
-            # 构造与cunzhi的zhi工具一致的响应格式
-            response_data = {
-                "user_input": None,
-                "selected_options": [],
-                "metadata": {
-                    "timestamp": datetime.now().isoformat(),
-                    "confirmation_id": confirmation_id,
-                    "source": "user_confirmation_tool"
-                }
-            }
-            
             # 根据用户响应状态填充数据
             if user_response.get("status") == "confirmed":
-                # 处理多选选项
-                if isinstance(user_response.get("value"), list):
-                    # 多选情况
-                    response_data["selected_options"] = user_response.get("value")
-                elif user_response.get("value"):
-                    # 单个选项情况（为了兼容性）
-                    response_data["selected_options"] = [user_response.get("value")]
-            
-            return response_data
-            
+                value = user_response.get("value")
+                
+                # 处理多选选项和用户输入
+                if isinstance(value, dict):
+                    # 新格式：包含selected和input
+                    selected_options = value.get("selected", [])
+                    user_input = value.get("input", "")
+                    
+                    # 构造返回文本
+                    result_parts = []
+                    if selected_options:
+                        result_parts.append(f"选择的选项: {', '.join(selected_options)}")
+                    if user_input:
+                        result_parts.append(f"用户输入: {user_input}")
+                    
+                    if result_parts:
+                        return "\n\n".join(result_parts)
+                    else:
+                        return "用户确认但未选择任何选项或输入内容"
+                elif isinstance(value, list):
+                    # 旧格式：只有多选选项
+                    if value:
+                        return f"选择的选项: {', '.join(value)}"
+                    else:
+                        return "用户确认但未选择任何选项"
+                elif value:
+                    # 单个选项或纯文本输入
+                    return str(value)
+                else:
+                    return "用户确认但未提供任何信息"
+            else:
+                return "用户取消操作"
+                
         except asyncio.TimeoutError:
             logger.warning(f"用户确认超时: confirmation_id={confirmation_id}")
             # 清理 future
             if confirmation_id in user_confirmation_futures:
                 del user_confirmation_futures[confirmation_id]
             
-            return {
-                "user_input": None,
-                "selected_options": [],
-                "metadata": {
-                    "error": "用户确认超时",
-                    "timestamp": datetime.now().isoformat(),
-                    "confirmation_id": confirmation_id,
-                    "source": "user_confirmation_tool"
-                }
-            }
+            return "用户确认超时"
         
     except Exception as e:
         logger.error(f"请求用户确认时发生错误: {str(e)}")
@@ -296,15 +265,7 @@ async def request_user_confirmation(
         if confirmation_id and confirmation_id in user_confirmation_futures:
             del user_confirmation_futures[confirmation_id]
             
-        return {
-            "user_input": None,
-            "selected_options": [],
-            "metadata": {
-                "error": f"请求用户确认失败: {str(e)}",
-                "timestamp": datetime.now().isoformat(),
-                "source": "user_confirmation_tool"
-            }
-        }
+        return f"请求用户确认失败: {str(e)}"
 
 def resolve_user_confirmation(confirmation_id: str, response: Dict[str, Any]):
     """

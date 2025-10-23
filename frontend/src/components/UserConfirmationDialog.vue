@@ -12,6 +12,7 @@
   >
     <div class="confirmation-content">
       <div ref="messageContent" class="message-content" :class="{ 'markdown-body': actualIsMarkdown }"></div>
+      
       <n-checkbox-group
         v-if="hasOptions"
         v-model:value="selectedValue"
@@ -26,6 +27,14 @@
           />
         </n-space>
       </n-checkbox-group>
+      
+      <n-input
+        v-model:value="userInput"
+        type="textarea"
+        placeholder="您可以在这里输入额外的信息..."
+        :autosize="{ minRows: 3, maxRows: 6 }"
+        class="user-input"
+      />
     </div>
   </n-modal>
 </template>
@@ -57,6 +66,7 @@ const showModal = computed({
 })
 
 const selectedValue = ref([])
+const userInput = ref('')
 const messageContent = ref(null)
 
 // Computed properties
@@ -87,7 +97,10 @@ const dialogType = computed(() => {
 const handleConfirm = () => {
   emit('confirm', {
     status: 'confirmed',
-    value: selectedValue.value
+    value: {
+      selected: selectedValue.value,
+      input: userInput.value
+    }
   })
   reset()
 }
@@ -102,6 +115,7 @@ const handleCancel = () => {
 
 const reset = () => {
   selectedValue.value = []
+  userInput.value = ''
 }
 
 // Process message content
@@ -153,6 +167,10 @@ watch([actualMessage, actualIsMarkdown], () => {
 
 .options-checkbox-group {
   padding: 8px 0;
+}
+
+.user-input {
+  margin-top: 8px;
 }
 
 /* 引入markdown样式 */
