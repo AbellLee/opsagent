@@ -135,6 +135,35 @@ const isOverLimit = computed(() => {
   return inputValue.value.length > maxLength.value
 })
 
+// 检查并确保WebSocket连接
+const ensureWebSocketConnection = async () => {
+  // 如果有WebSocket且连接正常，则直接返回
+  if (sessionStore.websocket && sessionStore.websocket.readyState === WebSocket.OPEN) {
+    return
+  }
+  
+  // 触发重新连接事件
+  window.dispatchEvent(new CustomEvent('reconnect-websocket'))
+  
+  // 等待连接建立，最多等待5秒
+  return new Promise((resolve, reject) => {
+    let attempts = 0
+    const maxAttempts = 50 // 最多尝试50次，每次间隔100ms
+    
+    const checkConnection = () => {
+      attempts++
+      if (sessionStore.websocket && sessionStore.websocket.readyState === WebSocket.OPEN) {
+        resolve()
+      } else if (attempts >= maxAttempts) {
+        reject(new Error('WebSocket连接超时'))
+      } else {
+        setTimeout(checkConnection, 100)
+      }
+    }
+    checkConnection()
+  })
+}
+
 // Event handlers
 const handleKeyDown = (event) => {
   // Enter 发送消息（不按 Shift）
@@ -209,6 +238,9 @@ const interruptMessage = async () => {
 
 // 阻塞模式发送消息
 const sendBlockingMessage = async (messageContent) => {
+  // 确保WebSocket连接正常
+  await ensureWebSocketConnection()
+  
   const response = await messageAPI.send(sessionStore.sessionId, {
     message: messageContent,
     response_mode: 'blocking'
@@ -230,6 +262,9 @@ const sendBlockingMessage = async (messageContent) => {
 
 // 流式模式发送消息
 const sendStreamingMessage = async (messageContent) => {
+  // 确保WebSocket连接正常
+  await ensureWebSocketConnection()
+  
   // 不再预先创建消息，而是根据流式数据动态创建
 
   // 通知开始流式输入
@@ -762,4 +797,5 @@ html.dark .char-count {
     justify-content: flex-end;
   }
 }
+
 </style>

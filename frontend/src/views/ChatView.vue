@@ -146,13 +146,26 @@ onMounted(() => {
   
   // 初始化WebSocket连接
   initWebSocket()
+  
+  // 监听重新连接事件
+  window.addEventListener('reconnect-websocket', handleReconnectWebSocket)
 })
 
 // 组件卸载时清理资源
 onUnmounted(() => {
   scrollManager.cleanup()
   closeWebSocket()
+  window.removeEventListener('reconnect-websocket', handleReconnectWebSocket)
 })
+
+// 处理WebSocket重新连接
+const handleReconnectWebSocket = () => {
+  console.log('收到重新连接请求')
+  // 关闭现有连接（如果有的话）
+  closeWebSocket()
+  // 重新初始化连接
+  initWebSocket()
+}
 
 // WebSocket相关状态
 const websocket = ref(null)
@@ -374,6 +387,24 @@ const createMessage = (role, content) => ({
   timestamp: new Date().toISOString()
 })
 
+// 检查并确保WebSocket连接
+const ensureWebSocketConnection = () => {
+  // 检查WebSocket是否存在且处于开启状态
+  if (!websocket.value || websocket.value.readyState !== WebSocket.OPEN) {
+    console.log('WebSocket连接已断开，正在重新连接...')
+    // 关闭现有连接（如果有的话）
+    closeWebSocket()
+    // 重新初始化连接
+    initWebSocket()
+    // 等待一小段时间确保连接建立
+    return new Promise(resolve => setTimeout(resolve, 1000))
+  }
+  return Promise.resolve()
+}
+
+// 添加一个标志来避免重复的连接检查
+let isCheckingConnection = false
+
 // 发送消息并获取AI回复
 const sendMessageAndGetReply = async (messageContent) => {
   try {
@@ -381,6 +412,14 @@ const sendMessageAndGetReply = async (messageContent) => {
     if (!sessionStore.sessionId) {
       message.error('请先选择或创建一个会话')
       return
+    }
+
+    // 避免重复的连接检查
+    if (!isCheckingConnection) {
+      isCheckingConnection = true
+      // 确保WebSocket连接正常
+      await ensureWebSocketConnection()
+      isCheckingConnection = false
     }
 
     // 添加用户消息
@@ -400,6 +439,7 @@ const sendMessageAndGetReply = async (messageContent) => {
       scrollManager.forceScrollToBottom() // 收到回复时强制滚动
     }
   } catch (error) {
+    isCheckingConnection = false
     console.error('发送消息失败:', error)
     message.error('发送消息失败，请重试')
   }
