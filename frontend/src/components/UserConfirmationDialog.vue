@@ -12,14 +12,20 @@
   >
     <div class="confirmation-content">
       <div ref="messageContent" class="message-content" :class="{ 'markdown-body': actualIsMarkdown }"></div>
-      <n-select
+      <n-checkbox-group
         v-if="hasOptions"
         v-model:value="selectedValue"
-        :multiple="multipleSelect"
-        :placeholder="selectPlaceholder"
-        :options="selectOptions"
-        class="options-select"
-      />
+        class="options-checkbox-group"
+      >
+        <n-space vertical>
+          <n-checkbox
+            v-for="option in actualOptions"
+            :key="option"
+            :value="option"
+            :label="option"
+          />
+        </n-space>
+      </n-checkbox-group>
     </div>
   </n-modal>
 </template>
@@ -27,7 +33,7 @@
 <script setup>
 import { ref, computed, onMounted, nextTick, watch } from 'vue'
 import { marked } from 'marked'
-import { NModal, NSelect } from 'naive-ui'
+import { NModal, NSelect, NCheckboxGroup, NCheckbox, NSpace } from 'naive-ui'
 
 // Props
 const props = defineProps({
@@ -50,7 +56,7 @@ const showModal = computed({
   set: (value) => emit('update:show', value)
 })
 
-const selectedValue = ref(null)
+const selectedValue = ref([])
 const messageContent = ref(null)
 
 // Computed properties
@@ -70,7 +76,7 @@ const selectOptions = computed(() => {
 })
 
 const selectPlaceholder = computed(() => {
-  return props.multipleSelect ? '请选择一个或多个选项' : '请选择一个选项'
+  return '请选择一个或多个选项'
 })
 
 const dialogType = computed(() => {
@@ -95,7 +101,7 @@ const handleCancel = () => {
 }
 
 const reset = () => {
-  selectedValue.value = null
+  selectedValue.value = []
 }
 
 // Process message content
@@ -143,6 +149,10 @@ watch([actualMessage, actualIsMarkdown], () => {
 
 .options-select {
   min-width: 200px;
+}
+
+.options-checkbox-group {
+  padding: 8px 0;
 }
 
 /* 引入markdown样式 */

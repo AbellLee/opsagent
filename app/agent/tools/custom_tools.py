@@ -263,16 +263,13 @@ async def request_user_confirmation(
             
             # 根据用户响应状态填充数据
             if user_response.get("status") == "confirmed":
-                # 如果用户选择了选项，则将选项添加到selected_options
-                if user_response.get("value"):
-                    if options and user_response.get("value") in options:
-                        response_data["selected_options"] = [user_response.get("value")]
-                    else:
-                        # 如果没有预定义选项或选择的值不在选项中，则将其视为用户输入
-                        response_data["user_input"] = user_response.get("value")
-                else:
-                    # 用户确认但没有选择任何值
-                    response_data["user_input"] = ""
+                # 处理多选选项
+                if isinstance(user_response.get("value"), list):
+                    # 多选情况
+                    response_data["selected_options"] = user_response.get("value")
+                elif user_response.get("value"):
+                    # 单个选项情况（为了兼容性）
+                    response_data["selected_options"] = [user_response.get("value")]
             
             return response_data
             
