@@ -79,7 +79,7 @@
 
 <script setup>
 import { computed, onMounted, ref, watch, nextTick } from 'vue'
-import { NButton, NIcon } from 'naive-ui'
+import { NButton, NIcon, createDiscreteApi } from 'naive-ui'
 import { parseMarkdown } from '../utils/markdown'
 import {
   MESSAGE_TYPES,
@@ -89,6 +89,8 @@ import {
   formatJsonContent,
   getToolStatusText
 } from '../constants/messageTypes'
+
+const { message: notification } = createDiscreteApi(['message'])
 
 const props = defineProps({
   message: {
@@ -239,9 +241,31 @@ const getToolStatusClass = (status) => {
 
 const copyToClipboard = async () => {
   try {
-    let textToCopy = props.message.content
+    let textToCopy = ''
 
-    // 如果有工具调用，也包含工具调用信息
+    // 根据消息内容类型处理要复制的文本
+    if (typeof props.message.content === 'string') {
+      // 旧格式：纯文本内容
+      textToCopy = props.message.content
+    } else if (Array.isArray(props.message.content)) {
+      // 新格式：内容序列
+      textToCopy = props.message.content
+        .map(item => {
+          if (item.type === 'text') {
+            return item.content
+          } else if (item.type === 'tool_call') {
+            return `工具: ${item.name}\n参数: ${JSON.stringify(item.args, null, 2)}\n结果: ${item.result || '无结果'}`
+          }
+          return ''
+        })
+        .filter(text => text.length > 0)
+        .join('\n\n')
+    } else {
+      // 其他情况，尝试转换为字符串
+      textToCopy = String(props.message.content)
+    }
+
+    // 如果有工具调用（旧格式兼容），也包含工具调用信息
     if (props.message.tool_calls && props.message.tool_calls.length > 0) {
       const toolInfo = props.message.tool_calls.map(call =>
         `工具: ${call.name}\n参数: ${JSON.stringify(call.args, null, 2)}\n结果: ${call.result || '无结果'}`
@@ -252,12 +276,10 @@ const copyToClipboard = async () => {
     await navigator.clipboard.writeText(textToCopy)
 
     // 使用 Naive UI 的消息提示
-    const { message } = await import('naive-ui')
-    message.success('已复制到剪贴板')
+    notification.success('已复制到剪贴板')
   } catch (error) {
     console.error('复制失败:', error)
-    const { message } = await import('naive-ui')
-    message.error('复制失败')
+    notification.error('复制失败')
   }
 }
 
