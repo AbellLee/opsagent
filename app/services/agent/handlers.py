@@ -14,7 +14,7 @@ from langgraph.store.postgres.aio import AsyncPostgresStore
 from app.core.logger import logger
 from app.core.config import settings
 from app.agent.graph import create_graph_async
-from app.services.agent.models import ChatCompletionResponse, ChunkChatCompletionResponse
+from app.models.schemas import ChatCompletionResponse, ChunkChatCompletionResponse
 from app.services.agent.utils import build_agent_inputs, create_agent_config
 
 

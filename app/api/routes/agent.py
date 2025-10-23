@@ -7,7 +7,7 @@ from uuid import UUID
 from app.core.logger import logger
 
 # 导入服务层模块
-from app.services.agent.models import AgentExecuteRequest, AgentChatRequest
+from app.models.schemas import AgentExecuteRequest, AgentChatRequest
 from app.services.agent.handlers import execute_agent_task, handle_blocking_chat, handle_streaming_chat
 from app.services.agent.utils import build_agent_inputs, create_agent_config, format_error_message
 from app.api.deps import get_db

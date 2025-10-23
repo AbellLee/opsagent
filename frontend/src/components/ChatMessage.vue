@@ -1021,7 +1021,7 @@ onMounted(() => {
 .content-sequence {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 5px;
 }
 
 .sequence-item {
@@ -1033,7 +1033,7 @@ onMounted(() => {
   border: 1px solid rgba(24, 144, 255, 0.12);
   border-radius: 6px;
   padding: 12px 16px;
-  margin: 8px 0;
+  margin: 3px 0;
   position: relative;
   transition: all 0.2s ease;
 }
@@ -1055,7 +1055,7 @@ onMounted(() => {
 }
 
 .text-response-item {
-  padding: 8px 0;
+  padding: 3px 0;
 }
 
 .text-content {
