@@ -47,6 +47,61 @@ def _validate_task_status(status: str) -> bool:
     except ValueError:
         return False
 
+def _get_user_and_session():
+    """获取用户ID和会话ID"""
+    user_id = get_user_id()
+    session_id = get_session_id()
+    
+    if not user_id:
+        raise ValueError("User ID not found in context")
+        
+    if not session_id:
+        raise ValueError("Session ID not found in context")
+        
+    return user_id, session_id
+
+def _validate_user_and_session(cursor, user_id: str, session_id: str):
+    """验证用户和会话"""
+    # 检查用户是否存在（在生产环境中启用，测试环境中可以禁用）
+    if not settings.debug and not _check_user_exists(cursor, user_id):
+        raise ValueError(f"User {user_id} does not exist")
+    
+    # 如果提供了session_id，检查会话是否存在且属于该用户
+    if session_id and not settings.debug and not _check_session_exists(cursor, session_id, user_id):
+        raise ValueError(f"Session {session_id} does not exist or does not belong to user {user_id}")
+
+def _execute_with_db(func):
+    """数据库操作执行装饰器"""
+    def wrapper(*args, **kwargs):
+        try:
+            user_id, session_id = _get_user_and_session()
+            
+            conn = _get_db_connection()
+            cursor = conn.cursor(cursor_factory=RealDictCursor)
+            
+            # 验证用户和会话
+            _validate_user_and_session(cursor, user_id, session_id)
+            
+            # 执行实际函数
+            result = func(user_id, session_id, cursor, *args, **kwargs)
+            
+            conn.commit()
+            cursor.close()
+            conn.close()
+            
+            # 通知前端任务更新
+            try:
+                _notify_task_update_sync(session_id)
+            except Exception as e:
+                logger.error(f"任务操作后通知失败: {e}", exc_info=True)
+                
+            return result
+        except Exception as e:
+            logger.error(f"数据库操作执行失败: {str(e)}")
+            return {"status": "error", "message": f"操作失败: {str(e)}"}
+    
+    return wrapper
+
 async def _notify_session_task_update(session_id: str):
     """通知会话任务更新"""
     # 延迟导入以避免循环导入
@@ -108,14 +163,9 @@ def _send_user_confirmation_request(session_id: str, confirmation_data: Dict[str
 
 def _notify_task_update_sync(session_id: str):
     """同步方式通知任务更新"""
-    # 延迟导入以避免循环导入
-    from app.api.routes.tasks import notify_task_update
-    
     if session_id:
         try:
             logger.info(f"准备同步通知任务更新: session_id={session_id}")
-            # 在异步环境中运行通知
-            import asyncio
             # 尝试获取当前事件循环
             try:
                 loop = asyncio.get_running_loop()
@@ -130,16 +180,16 @@ def _notify_task_update_sync(session_id: str):
 
 def get_custom_tools():
     """获取所有自定义工具"""
-    return [add_tasks, update_tasks, get_tasks, request_user_confirmation]
+    return [add_tasks, update_tasks, get_tasks, ask_user]
 
 @tool
-async def request_user_confirmation(
+async def ask_user(
     message: str,
     title: str = "请确认",
     options: Optional[List[str]] = None,
     default_value: Optional[str] = None,
     is_markdown: bool = False
-) -> Dict[str, Any]:
+) -> str:
     """
     当需求不明确、有多个方案或需要更新方案/策略时，请求用户确认的工具。
     该工具会通过WebSocket向前端发送确认请求消息，并等待用户响应。
@@ -300,33 +350,8 @@ def add_tasks(tasks: List[Dict[str, Any]]) -> Dict[str, Any]:
     Returns:
         包含操作结果的字典
     """
-    try:
-        # 从上下文获取user_id和session_id
-        user_id = get_user_id()
-        session_id = get_session_id()
-        
-        # 如果没有从上下文获取到，则返回错误
-        if not user_id:
-            return {"status": "error", "message": "User ID not found in context"}
-            
-        if not session_id:
-            return {"status": "error", "message": "Session ID not found in context"}
-
-        conn = _get_db_connection()
-        cursor = conn.cursor(cursor_factory=RealDictCursor)
-        
-        # 检查用户是否存在（在生产环境中启用，测试环境中可以禁用）
-        if not settings.debug and not _check_user_exists(cursor, user_id):
-            cursor.close()
-            conn.close()
-            return {"status": "error", "message": f"User {user_id} does not exist"}
-        
-        # 如果提供了session_id，检查会话是否存在且属于该用户
-        if session_id and not settings.debug and not _check_session_exists(cursor, session_id, user_id):
-            cursor.close()
-            conn.close()
-            return {"status": "error", "message": f"Session {session_id} does not exist or does not belong to user {user_id}"}
-        
+    @_execute_with_db
+    def _add_tasks_impl(user_id, session_id, cursor, tasks):
         added_tasks = []
         for task in tasks:
             # 生成8位短任务ID
@@ -338,8 +363,6 @@ def add_tasks(tasks: List[Dict[str, Any]]) -> Dict[str, Any]:
             
             # 验证状态
             if not _validate_task_status(status):
-                cursor.close()
-                conn.close()
                 return {"status": "error", "message": f"Invalid task status: {status}. Must be one of: PENDING, IN_PROGRESS, COMPLETE, CANCELLED, ERROR"}
             
             parent_task_id = task.get("parent_task_id")
@@ -367,24 +390,13 @@ def add_tasks(tasks: List[Dict[str, Any]]) -> Dict[str, Any]:
             
             logger.info(f"Added task {task_id} for user {user_id} in session {session_id}")
         
-        conn.commit()
-        cursor.close()
-        conn.close()
-        
-        # 通知前端任务更新
-        try:
-            _notify_task_update_sync(session_id)
-        except Exception as e:
-            logger.error(f"任务添加后通知失败: {e}", exc_info=True)
-        
         return {
             "status": "success", 
             "message": f"Successfully added {len(added_tasks)} tasks for user {user_id} in session {session_id}", 
             "tasks": added_tasks
         }
-    except Exception as e:
-        logger.error(f"Error adding tasks: {str(e)}")
-        return {"status": "error", "message": f"Failed to add tasks: {str(e)}"}
+    
+    return _add_tasks_impl(tasks)
 
 @tool
 def update_tasks(tasks: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -404,32 +416,11 @@ def update_tasks(tasks: List[Dict[str, Any]]) -> Dict[str, Any]:
     Returns:
         包含操作结果的字典
     """
-    try:
-        # 从上下文获取user_id和session_id
-        user_id = get_user_id()
-        session_id = get_session_id()
-        
-        # 如果没有从上下文获取到，则返回错误
-        if not user_id:
-            return {"status": "error", "message": "User ID not found in context"}
-            
-        if not session_id:
-            return {"status": "error", "message": "Session ID not found in context"}
-
-        conn = _get_db_connection()
-        cursor = conn.cursor(cursor_factory=RealDictCursor)
-        
-        # 检查用户是否存在（在生产环境中启用，测试环境中可以禁用）
-        if not settings.debug and not _check_user_exists(cursor, user_id):
-            cursor.close()
-            conn.close()
-            return {"status": "error", "message": f"User {user_id} does not exist"}
-        
+    @_execute_with_db
+    def _update_tasks_impl(user_id, session_id, cursor, tasks):
         updated_tasks = []
         for task_update in tasks:
             if "id" not in task_update:
-                cursor.close()
-                conn.close()
                 return {
                     "status": "error",
                     "message": "Each task must have an 'id' field"
@@ -443,8 +434,6 @@ def update_tasks(tasks: List[Dict[str, Any]]) -> Dict[str, Any]:
             """, (task_id, user_id))
             
             if not cursor.fetchone():
-                cursor.close()
-                conn.close()
                 return {
                     "status": "error",
                     "message": f"Task with id {task_id} not found for user {user_id}"
@@ -462,8 +451,6 @@ def update_tasks(tasks: List[Dict[str, Any]]) -> Dict[str, Any]:
                 # 验证状态
                 status = task_update["status"]
                 if not _validate_task_status(status):
-                    cursor.close()
-                    conn.close()
                     return {"status": "error", "message": f"Invalid task status: {status}. Must be one of: PENDING, IN_PROGRESS, COMPLETE, CANCELLED, ERROR"}
                 
                 update_fields.append("status = %s")
@@ -495,26 +482,13 @@ def update_tasks(tasks: List[Dict[str, Any]]) -> Dict[str, Any]:
             
             logger.info(f"Updated task {task_id} for user {user_id} in session {session_id}")
         
-        conn.commit()
-        cursor.close()
-        conn.close()
-        
-        # 通知前端任务更新
-        logger.info(f"任务更新完成，准备通知前端: session_id={session_id}")
-        try:
-            _notify_task_update_sync(session_id)
-        except Exception as e:
-            logger.error(f"任务更新后通知失败: {e}", exc_info=True)
-        logger.info(f"通知前端任务完成: session_id={session_id}")
-        
         return {
             "status": "success", 
             "message": f"Successfully updated {len(updated_tasks)} tasks for user {user_id} in session {session_id}", 
             "tasks": updated_tasks
         }
-    except Exception as e:
-        logger.error(f"Error updating tasks: {str(e)}", exc_info=True)
-        return {"status": "error", "message": f"Failed to update tasks: {str(e)}"}
+    
+    return _update_tasks_impl(tasks)
 
 @tool
 def get_tasks(status: str = None) -> Dict[str, Any]:
@@ -528,31 +502,10 @@ def get_tasks(status: str = None) -> Dict[str, Any]:
     Returns:
         包含任务列表的字典
     """
-    try:
-        # 从上下文获取user_id和session_id
-        user_id = get_user_id()
-        session_id = get_session_id()
-        
-        # 如果没有从上下文获取到，则返回错误
-        if not user_id:
-            return {"status": "error", "message": "User ID not found in context"}
-            
-        if not session_id:
-            return {"status": "error", "message": "Session ID not found in context"}
-
-        conn = _get_db_connection()
-        cursor = conn.cursor(cursor_factory=RealDictCursor)
-        
-        # 检查用户是否存在（在生产环境中启用，测试环境中可以禁用）
-        if not settings.debug and not _check_user_exists(cursor, user_id):
-            cursor.close()
-            conn.close()
-            return {"status": "error", "message": f"User {user_id} does not exist"}
-        
+    @_execute_with_db
+    def _get_tasks_impl(user_id, session_id, cursor, status=None):
         # 如果提供了status，验证它是否有效
         if status and not _validate_task_status(status):
-            cursor.close()
-            conn.close()
             return {"status": "error", "message": f"Invalid task status: {status}. Must be one of: PENDING, IN_PROGRESS, COMPLETE, CANCELLED, ERROR"}
         
         # 构建查询语句
@@ -580,9 +533,6 @@ def get_tasks(status: str = None) -> Dict[str, Any]:
             task_dict['updated_at'] = task_dict['updated_at'].isoformat()
             formatted_tasks.append(task_dict)
         
-        cursor.close()
-        conn.close()
-        
         logger.info(f"Retrieved {len(formatted_tasks)} tasks for user {user_id} in session {session_id}")
         
         return {
@@ -590,6 +540,9 @@ def get_tasks(status: str = None) -> Dict[str, Any]:
             "message": f"Successfully retrieved {len(formatted_tasks)} tasks for user {user_id} in session {session_id}",
             "tasks": formatted_tasks
         }
-    except Exception as e:
-        logger.error(f"Error retrieving tasks: {str(e)}")
-        return {"status": "error", "message": f"Failed to retrieve tasks: {str(e)}"}
+
+    return _get_tasks_impl(status)
+
+def _generate_short_id():
+    """生成8位短ID"""
+    return uuid4().hex[:8]
