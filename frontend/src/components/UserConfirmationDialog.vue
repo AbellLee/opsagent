@@ -1,7 +1,7 @@
 <template>
   <n-modal
     v-model:show="showModal"
-    :title="actualTitle"
+    title="请确认"
     preset="dialog"
     :type="dialogType"
     positive-text="确认"
@@ -11,7 +11,7 @@
     @close="handleCancel"
   >
     <div class="confirmation-content">
-      <div ref="messageContent" class="message-content" :class="{ 'markdown-body': actualIsMarkdown }"></div>
+      <div ref="messageContent" class="message-content"></div>
       
       <n-checkbox-group
         v-if="hasOptions"
@@ -70,10 +70,8 @@ const userInput = ref('')
 const messageContent = ref(null)
 
 // Computed properties
-const actualTitle = computed(() => props.data.title || '请确认')
 const actualMessage = computed(() => props.data.message || '请确认操作')
 const actualOptions = computed(() => props.data.options || [])
-const actualIsMarkdown = computed(() => props.data.is_markdown !== undefined ? props.data.is_markdown : false)
 
 const hasOptions = computed(() => actualOptions.value && Array.isArray(actualOptions.value) && actualOptions.value.length > 0)
 
@@ -122,14 +120,10 @@ const reset = () => {
 const processMessageContent = async () => {
   if (!messageContent.value) return
   
-  if (actualIsMarkdown.value) {
-    try {
-      messageContent.value.innerHTML = marked(actualMessage.value || '请确认操作')
-    } catch (e) {
-      console.error('Markdown解析失败:', e)
-      messageContent.value.innerHTML = actualMessage.value || '请确认操作'
-    }
-  } else {
+  try {
+    messageContent.value.innerHTML = marked(actualMessage.value || '请确认操作')
+  } catch (e) {
+    console.error('Markdown解析失败:', e)
     messageContent.value.innerHTML = actualMessage.value || '请确认操作'
   }
 }
@@ -142,7 +136,7 @@ onMounted(() => {
 })
 
 // Watch for message changes
-watch([actualMessage, actualIsMarkdown], () => {
+watch([actualMessage], () => {
   nextTick(() => {
     processMessageContent()
   })

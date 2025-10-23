@@ -185,10 +185,7 @@ def get_custom_tools():
 @tool
 async def ask_user(
     message: str,
-    title: str = "请确认",
-    options: Optional[List[str]] = None,
-    default_value: Optional[str] = None,
-    is_markdown: bool = False
+    options: Optional[List[str]] = None
 ) -> str:
     """
     当需求不明确、有多个方案或需要更新方案/策略时，请求用户确认的工具。
@@ -196,10 +193,7 @@ async def ask_user(
     
     Args:
         message: 确认消息内容（支持Markdown格式）
-        title: 确认框标题（可选，默认为"请确认"）
         options: 可选的选项列表（可选）
-        default_value: 默认值（可选）
-        is_markdown: 消息是否为Markdown格式（可选，默认为False）
 
     Returns:
         包含用户选择结果的字典，格式与cunzhi的zhi工具一致
@@ -228,11 +222,11 @@ async def ask_user(
         confirmation_request = {
             "type": "user_confirmation_request",
             "confirmation_id": confirmation_id,
-            "title": title,
+            "title": "请确认",
             "message": message,
             "options": options,
-            "default_value": default_value,
-            "is_markdown": is_markdown,
+            "default_value": None,
+            "is_markdown": False,
             "user_id": user_id,
             "session_id": session_id,
             "timestamp": datetime.now().isoformat()
