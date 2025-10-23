@@ -66,7 +66,10 @@ def create_call_model_with_tools(tools: List[BaseTool]):
 
             # 准备消息历史
             messages: List[BaseMessage] = [SystemMessage(content=system_msg)]
-            messages.extend(state["messages"])
+            
+            # 修复不完整的消息序列 - 确保所有tool_calls都有对应的ToolMessage
+            fixed_messages = _fix_incomplete_tool_calls(state["messages"])
+            messages.extend(fixed_messages)
 
             logger.info(f"开始调用模型，模型类型: {type(model_with_tools).__name__}")
 
@@ -134,6 +137,54 @@ def create_call_model_with_tools(tools: List[BaseTool]):
             return {"messages": [AIMessage(content=f"模型调用失败: {str(e)}")]}
 
     return call_model
+
+
+def _fix_incomplete_tool_calls(messages: List[BaseMessage]) -> List[BaseMessage]:
+    """
+    修复不完整的消息序列，确保所有包含tool_calls的AIMessage都有对应的ToolMessage
+    
+    当从检查点恢复对话时，可能存在包含tool_calls但没有对应ToolMessage的AIMessage，
+    这会导致API错误。此函数会检测这种情况并添加占位的ToolMessage。
+    """
+    fixed_messages = []
+    tool_call_ids = set()  # 跟踪已有的tool_call_id
+    processed_tool_calls = set()  # 跟踪已处理的tool_call_id
+    
+    # 第一遍：收集所有已有的ToolMessage的tool_call_id
+    for msg in messages:
+        if isinstance(msg, ToolMessage) and hasattr(msg, 'tool_call_id'):
+            tool_call_ids.add(msg.tool_call_id)
+    
+    # 第二遍：处理消息，修复不完整的tool_calls
+    for msg in messages:
+        fixed_messages.append(msg)
+        
+        # 检查AIMessage是否有未完成的tool_calls
+        if isinstance(msg, AIMessage) and hasattr(msg, 'tool_calls') and msg.tool_calls:
+            for tool_call in msg.tool_calls:
+                # 获取tool_call_id，支持不同的格式
+                tool_call_id = None
+                if isinstance(tool_call, dict):
+                    tool_call_id = tool_call.get('id')
+                elif hasattr(tool_call, 'id'):
+                    tool_call_id = tool_call.id
+                
+                # 如果tool_call_id存在且没有对应的ToolMessage，则添加占位符
+                if tool_call_id and tool_call_id not in tool_call_ids and tool_call_id not in processed_tool_calls:
+                    # 添加占位的ToolMessage
+                    placeholder_msg = ToolMessage(
+                        content="工具调用被中断或未完成",
+                        tool_call_id=tool_call_id
+                    )
+                    fixed_messages.append(placeholder_msg)
+                    processed_tool_calls.add(tool_call_id)
+                    logger.info(f"添加了占位ToolMessage用于未完成的tool_call_id: {tool_call_id}")
+    
+    # 如果对消息进行了修复，记录日志
+    if len(fixed_messages) != len(messages):
+        logger.info(f"修复了不完整的消息序列: 原始{len(messages)}条消息 -> 修复后{len(fixed_messages)}条消息")
+    
+    return fixed_messages
 
 
 # ========================
