@@ -357,15 +357,15 @@ const handleLogout = () => {
   transform: translate(-50%, -50%);
   width: 120px;
   height: 120px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, #a8d8ea 0%, #aa96da 100%);
   border-radius: 50%;
   opacity: 0.1;
   z-index: 0;
 }
 
 .profile-avatar {
-  border: 4px solid #667eea;
-  box-shadow: 0 8px 32px rgba(102, 126, 234, 0.3);
+  border: 4px solid #a8d8ea;
+  box-shadow: 0 8px 32px rgba(168, 216, 234, 0.3);
   position: relative;
   z-index: 1;
   transition: all 0.3s ease;
@@ -373,7 +373,7 @@ const handleLogout = () => {
 
 .profile-avatar:hover {
   transform: scale(1.05);
-  box-shadow: 0 12px 40px rgba(102, 126, 234, 0.4);
+  box-shadow: 0 12px 40px rgba(168, 216, 234, 0.4);
 }
 
 .profile-info-section {
@@ -412,7 +412,7 @@ html.dark .user-avatar-wrapper:hover .user-avatar {
 }
 
 html.dark .profile-avatar {
-  border-color: #667eea;
+  border-color: #a8d8ea;
 }
 
 html.dark .profile-footer {
@@ -446,7 +446,7 @@ html.dark .profile-footer {
 }
 
 .settings-nav-item.active {
-  background-color: var(--primary-color);
+  background: linear-gradient(135deg, #a8d8ea 0%, #aa96da 100%);
   color: white;
 }
 

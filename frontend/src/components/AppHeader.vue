@@ -38,22 +38,31 @@ const currentSession = computed(() => {
 /* Header 美化 */
 .n-layout-header {
   background: rgba(255, 255, 255, 0.95) !important;
-  backdrop-filter: blur(20px);
+  backdrop-filter: blur(12px);
   border: none !important;
-  box-shadow: 0 4px 32px rgba(0, 0, 0, 0.1);
-  border-radius: 0 0 20px 20px !important;
-  margin: 0 12px 8px 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  border-radius: 0 0 var(--border-radius-xl) var(--border-radius-xl) !important;
+  margin: 0 var(--spacing-3) var(--spacing-2) var(--spacing-3);
   height: 72px !important;
   min-height: 72px !important;
   max-height: 72px !important;
   flex-shrink: 0;
   z-index: 10;
   position: relative;
+  transition: all var(--transition-normal);
+}
+
+.n-layout-header:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
 }
 
 /* 暗色模式美化 */
 html.dark .n-layout-header {
   background: rgba(30, 30, 30, 0.95) !important;
-  box-shadow: 0 4px 32px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+html.dark .n-layout-header:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 }
 </style>

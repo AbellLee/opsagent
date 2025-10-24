@@ -32,16 +32,16 @@ const handleExpand = () => {
 <style scoped>
 /* Sidebar 美化 - 修复布局和展开按钮，移除白线 */
 .n-layout-sider {
-  background: rgba(255, 255, 255, 0.9) !important;
-  backdrop-filter: blur(20px);
+  background: rgba(255, 255, 255, 0.95) !important;
+  backdrop-filter: var(--backdrop-blur-md);
   border: none !important;
   border-right: none !important;
   border-left: none !important;
   border-top: none !important;
   border-bottom: none !important;
-  border-radius: 20px !important;
-  margin: 0 8px 12px 12px !important;
-  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.12);
+  border-radius: var(--border-radius-xl) !important;
+  margin: 0 var(--spacing-2) var(--spacing-3) var(--spacing-3) !important;
+  box-shadow: var(--shadow-md);
   overflow: visible !important; /* 允许展开按钮显示 */
   height: calc(100vh - 92px) !important;
   max-height: calc(100vh - 92px) !important;
@@ -49,11 +49,12 @@ const handleExpand = () => {
   display: flex !important;
   flex-direction: column !important;
   position: relative !important;
+  transition: all var(--transition-normal);
 }
 
 /* 修复侧边栏内容区域，移除所有边框 */
 .n-layout-sider :deep(.n-layout-sider-scroll-container) {
-  border-radius: 20px !important;
+  border-radius: var(--border-radius-xl) !important;
   overflow: hidden !important;
   border: none !important;
   border-right: none !important;
@@ -83,61 +84,61 @@ const handleExpand = () => {
 
 /* 美化展开/收起按钮 */
 .n-layout-sider :deep(.n-layout-toggle-button) {
-  background: rgba(255, 255, 255, 0.9) !important;
-  backdrop-filter: blur(10px) !important;
-  border: 1px solid rgba(102, 126, 234, 0.2) !important;
+  background: rgba(255, 255, 255, 0.95) !important;
+  backdrop-filter: var(--backdrop-blur-sm) !important;
+  border: 1px solid rgba(168, 216, 234, 0.3) !important;
   border-radius: 50% !important;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1) !important;
+  box-shadow: var(--shadow-sm) !important;
   width: 32px !important;
   height: 32px !important;
   right: -16px !important;
   top: 50% !important;
   transform: translateY(-50%) !important;
   z-index: 100 !important;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  transition: all var(--transition-normal) !important;
 }
 
 .n-layout-sider :deep(.n-layout-toggle-button:hover) {
-  background: rgba(102, 126, 234, 0.1) !important;
-  border-color: rgba(102, 126, 234, 0.4) !important;
+  background: linear-gradient(135deg, var(--primary-color-1) 0%, var(--primary-color-2) 100%) !important;
+  border-color: rgba(168, 216, 234, 0.5) !important;
   transform: translateY(-50%) scale(1.1) !important;
-  box-shadow: 0 6px 20px rgba(102, 126, 234, 0.2) !important;
+  box-shadow: var(--shadow-md) !important;
 }
 
 .n-layout-sider :deep(.n-layout-toggle-button .n-icon) {
-  color: #667eea !important;
-  transition: all 0.3s ease !important;
+  color: var(--primary-color-1) !important;
+  transition: all var(--transition-normal) !important;
 }
 
 .n-layout-sider :deep(.n-layout-toggle-button:hover .n-icon) {
-  color: #5a6fd8 !important;
+  color: var(--text-inverse) !important;
 }
 
 /* 暗色模式下的侧边栏 */
 html.dark .n-layout-sider {
-  background: rgba(30, 30, 30, 0.9) !important;
-  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.3);
+  background: rgba(30, 30, 30, 0.95) !important;
+  box-shadow: var(--shadow-md);
 }
 
 /* 暗色模式下的展开按钮 */
 html.dark .n-layout-sider :deep(.n-layout-toggle-button) {
-  background: rgba(30, 30, 30, 0.9) !important;
-  border-color: rgba(102, 126, 234, 0.3) !important;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3) !important;
+  background: rgba(30, 30, 30, 0.95) !important;
+  border-color: rgba(168, 216, 234, 0.4) !important;
+  box-shadow: var(--shadow-sm) !important;
 }
 
 html.dark .n-layout-sider :deep(.n-layout-toggle-button:hover) {
-  background: rgba(102, 126, 234, 0.2) !important;
-  border-color: rgba(102, 126, 234, 0.5) !important;
-  box-shadow: 0 6px 20px rgba(102, 126, 234, 0.3) !important;
+  background: linear-gradient(135deg, var(--primary-color-1) 0%, var(--primary-color-2) 100%) !important;
+  border-color: rgba(168, 216, 234, 0.6) !important;
+  box-shadow: var(--shadow-md) !important;
 }
 
 html.dark .n-layout-sider :deep(.n-layout-toggle-button .n-icon) {
-  color: #667eea !important;
+  color: var(--primary-color-1) !important;
 }
 
 html.dark .n-layout-sider :deep(.n-layout-toggle-button:hover .n-icon) {
-  color: #7c8aed !important;
+  color: var(--text-inverse) !important;
 }
 
 /* 全面移除侧边栏白线的样式 */

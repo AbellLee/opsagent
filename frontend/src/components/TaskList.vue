@@ -209,6 +209,7 @@ onUnmounted(() => {
   flex-direction: column;
   background-color: #fafafa;
   border-left: 1px solid #e0e0e0;
+  border-radius: 0 12px 12px 0;
 }
 
 .task-list-header {
@@ -217,7 +218,8 @@ onUnmounted(() => {
   align-items: center;
   padding: 12px 16px;
   border-bottom: 1px solid #e0e0e0;
-  background-color: #ffffff;
+  background: linear-gradient(135deg, #a8d8ea 0%, #aa96da 100%);
+  border-radius: 0 12px 0 0;
 }
 
 .header-title {
@@ -253,7 +255,7 @@ html.dark .task-list-container {
 }
 
 html.dark .task-list-header {
-  background-color: #2d2d2d;
+  background: linear-gradient(135deg, #a8d8ea 0%, #aa96da 100%);
   border-bottom: 1px solid #333;
 }
 

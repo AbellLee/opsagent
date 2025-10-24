@@ -559,13 +559,13 @@ const sendExample = async () => {
 }
 
 .messages-container::-webkit-scrollbar-thumb {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, #a8d8ea 0%, #aa96da 100%);
   border-radius: 3px;
   transition: all 0.3s ease;
 }
 
 .messages-container::-webkit-scrollbar-thumb:hover {
-  background: linear-gradient(135deg, #5a6fd8 0%, #6a4c93 100%);
+  background: linear-gradient(135deg, #a8d8ea 0%, #fcbad3 100%);
 }
 
 .empty-messages {
@@ -590,7 +590,7 @@ const sendExample = async () => {
 .input-container {
   flex-shrink: 0;
   border-top: 1px solid rgba(0, 0, 0, 0.08);
-  background: rgba(255, 255, 255, 0.95);
+  background: rgba(255, 255, 255, 0.9);
   backdrop-filter: blur(10px);
   padding: 0;
   position: relative;
@@ -609,9 +609,10 @@ const sendExample = async () => {
 .task-panel-container {
   width: 300px;
   display: flex;
-  transition: all 0.3s ease;
-  border-left: 1px solid #e0e0e0;
-  background-color: #fff;
+  transition: all var(--transition-normal);
+  border-left: 1px solid var(--border-color);
+  background-color: var(--bg-primary);
+  border-radius: var(--border-radius-lg) 0 0 var(--border-radius-lg);
 }
 
 .task-panel-collapsed {
@@ -626,28 +627,28 @@ const sendExample = async () => {
   transform: translateY(-50%);
   width: 24px;
   height: 60px;
-  background-color: #fff;
-  border: 1px solid #e0e0e0;
+  background-color: var(--bg-primary);
+  border: 1px solid var(--border-color);
   border-right: none;
-  border-radius: 4px 0 0 4px;
+  border-radius: var(--border-radius-sm) 0 0 var(--border-radius-sm);
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
   z-index: 100;
-  box-shadow: -2px 0 4px rgba(0, 0, 0, 0.1);
-  transition: all 0.3s ease;
+  box-shadow: var(--shadow-sm);
+  transition: all var(--transition-normal);
 }
 
 .task-panel-collapsed .task-panel-toggle {
   right: 0;
-  border-right: 1px solid #e0e0e0;
+  border-right: 1px solid var(--border-color);
   border-left: none;
-  border-radius: 0 4px 4px 0;
+  border-radius: 0 var(--border-radius-sm) var(--border-radius-sm) 0;
 }
 
 .task-panel-toggle:hover {
-  background-color: #f5f5f5;
+  background-color: var(--bg-secondary);
 }
 
 .task-panel-content {
@@ -662,8 +663,9 @@ const sendExample = async () => {
   right: 340px; /* 考虑任务面板宽度 */
   z-index: 1000;
   cursor: pointer;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  border-radius: 50%;
+  box-shadow: var(--shadow-md);
+  border-radius: var(--border-radius-full);
+  transition: all var(--transition-normal);
 }
 
 .task-panel-collapsed .scroll-to-bottom-btn {
@@ -672,13 +674,13 @@ const sendExample = async () => {
 
 .scroll-to-bottom-btn:hover {
   transform: translateY(-2px);
-  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
+  box-shadow: var(--shadow-lg);
 }
 
 /* 回到底部按钮动画 */
 .scroll-to-bottom-enter-active,
 .scroll-to-bottom-leave-active {
-  transition: all 0.3s ease;
+  transition: all var(--transition-normal);
 }
 
 .scroll-to-bottom-enter-from,
@@ -703,11 +705,11 @@ html.dark .messages-container::-webkit-scrollbar-thumb {
 }
 
 html.dark .messages-container::-webkit-scrollbar-thumb:hover {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, #a8d8ea 0%, #aa96da 100%);
 }
 
 html.dark .input-container {
-  background: rgba(30, 30, 30, 0.95);
+  background: rgba(30, 30, 30, 0.9);
   border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
 
@@ -716,24 +718,24 @@ html.dark .empty-messages {
 }
 
 html.dark .task-panel-container {
-  background-color: #1e1e1e;
-  border-left: 1px solid #333;
+  background-color: var(--bg-primary);
+  border-left: 1px solid var(--border-color);
 }
 
 html.dark .task-panel-toggle {
-  background-color: #2d2d2d;
-  border: 1px solid #333;
+  background-color: var(--bg-primary);
+  border: 1px solid var(--border-color);
   border-right: none;
-  box-shadow: -2px 0 4px rgba(0, 0, 0, 0.3);
+  box-shadow: var(--shadow-sm);
 }
 
 html.dark .task-panel-collapsed .task-panel-toggle {
-  border-right: 1px solid #333;
+  border-right: 1px solid var(--border-color);
   border-left: none;
 }
 
 html.dark .task-panel-toggle:hover {
-  background-color: #3d3d3d;
+  background-color: var(--bg-secondary);
 }
 
 html.dark .scroll-to-bottom-btn {

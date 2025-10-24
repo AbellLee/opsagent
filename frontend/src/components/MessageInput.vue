@@ -609,30 +609,30 @@ onMounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 16px 20px;
-  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
-  border-radius: 0 0 12px 12px;
+  padding: var(--spacing-4) var(--spacing-5);
+  background: linear-gradient(135deg, var(--bg-secondary) 0%, var(--bg-tertiary) 100%);
+  border-radius: 0 0 var(--border-radius-lg) var(--border-radius-lg);
   border-top: 1px solid rgba(226, 232, 240, 0.6);
 }
 
 /* 新的模式选择器 */
 .mode-selector {
   display: flex;
-  background: white;
-  border-radius: 8px;
-  padding: 4px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  background: var(--bg-primary);
+  border-radius: var(--border-radius-md);
+  padding: var(--spacing-1);
+  box-shadow: var(--shadow-sm);
   border: 1px solid rgba(226, 232, 240, 0.8);
 }
 
 .mode-option {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 8px 12px;
-  border-radius: 6px;
+  gap: var(--spacing-1);
+  padding: var(--spacing-2) var(--spacing-3);
+  border-radius: var(--border-radius-sm);
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all var(--transition-fast);
   font-size: 13px;
   font-weight: 500;
   color: #64748b;
@@ -641,14 +641,14 @@ onMounted(() => {
 }
 
 .mode-option:hover {
-  background: rgba(59, 130, 246, 0.05);
-  color: #3b82f6;
+  background: rgba(168, 216, 234, 0.1);
+  color: var(--primary-color-1);
 }
 
 .mode-option.active {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, var(--primary-color-1) 0%, var(--primary-color-2) 100%);
   color: white;
-  box-shadow: 0 2px 4px rgba(102, 126, 234, 0.3);
+  box-shadow: 0 2px 4px rgba(168, 216, 234, 0.3);
 }
 
 .mode-icon {
@@ -674,9 +674,9 @@ onMounted(() => {
   font-size: 12px;
   color: #64748b;
   font-weight: 500;
-  padding: 4px 8px;
+  padding: var(--spacing-1) var(--spacing-2);
   background: rgba(255, 255, 255, 0.8);
-  border-radius: 6px;
+  border-radius: var(--border-radius-sm);
   border: 1px solid rgba(226, 232, 240, 0.6);
 }
 
@@ -684,7 +684,7 @@ onMounted(() => {
   font-size: 12px;
   color: #64748b;
   font-weight: 500;
-  transition: color 0.2s ease;
+  transition: color var(--transition-fast);
 }
 
 .char-count.warning {
@@ -739,8 +739,8 @@ html.dark .mode-option {
 }
 
 html.dark .mode-option:hover {
-  background: rgba(59, 130, 246, 0.1);
-  color: #60a5fa;
+  background: rgba(168, 216, 234, 0.2);
+  color: var(--primary-color-1);
 }
 
 html.dark .char-count-wrapper {

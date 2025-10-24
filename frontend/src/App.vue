@@ -141,4 +141,5 @@ window.refreshSessions = refreshSessions
 
 <style>
 @import './styles/global.css';
+@import './styles/design-system.css';
 </style>

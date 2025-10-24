@@ -432,11 +432,20 @@ onMounted(() => {
 .mcp-toolbar {
   padding: 16px;
   border-bottom: 1px solid var(--border-color);
+  background: linear-gradient(135deg, #a8d8ea 0%, #aa96da 100%);
+  border-radius: 12px 12px 0 0;
 }
 
 .mcp-config-list {
   flex: 1;
   padding: 0 16px;
   overflow: auto;
+  background-color: #ffffff;
+  border-radius: 0 0 12px 12px;
 }
+
+html.dark .mcp-config-list {
+  background-color: #1e1e1e;
+}
+
 </style>

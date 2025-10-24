@@ -127,7 +127,7 @@ const toggleExpanded = () => {
 <style scoped>
 .task-item {
   padding: 12px;
-  border-radius: 8px;
+  border-radius: 12px;
   background-color: #ffffff;
   border: 1px solid #e8e8e8;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
@@ -135,7 +135,7 @@ const toggleExpanded = () => {
 }
 
 .task-item:hover {
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 2px 8px rgba(168, 216, 234, 0.1);
   border-color: #d9d9d9;
 }
 
@@ -148,11 +148,11 @@ const toggleExpanded = () => {
 }
 
 .task-item.task-status-pending {
-  border-left: 3px solid #1890ff;
+  border-left: 3px solid #a8d8ea;
 }
 
 .task-item.task-status-cancelled {
-  border-left: 3px solid #999;
+  border-left: 3px solid #fcbad3;
 }
 
 .task-item.task-status-error {

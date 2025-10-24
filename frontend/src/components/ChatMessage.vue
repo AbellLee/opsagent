@@ -1103,13 +1103,13 @@ onMounted(() => {
   gap: 10px;
   padding: 0;
   cursor: pointer;
-  transition: all 0.2s;
-  border-radius: 4px;
+  transition: all var(--transition-fast);
+  border-radius: var(--border-radius-sm);
   min-height: 32px;
 }
 
 .step-indicator:hover {
-  background: rgba(24, 144, 255, 0.08);
+  background: rgba(168, 216, 234, 0.15);
   padding: 4px 8px;
   margin: -4px -8px;
 }
@@ -1121,9 +1121,9 @@ onMounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(24, 144, 255, 0.1);
-  border-radius: 4px;
-  color: #1890ff;
+  background: rgba(168, 216, 234, 0.1);
+  border-radius: var(--border-radius-sm);
+  color: var(--primary-color-1);
   flex-shrink: 0;
 }
 
@@ -1137,7 +1137,7 @@ onMounted(() => {
 .step-status {
   font-size: 11px;
   padding: 3px 8px;
-  border-radius: 10px;
+  border-radius: var(--border-radius-full);
   font-weight: 500;
   text-transform: uppercase;
   letter-spacing: 0.3px;
@@ -1186,7 +1186,7 @@ onMounted(() => {
 
 .expand-btn {
   opacity: 0.7;
-  transition: all 0.2s;
+  transition: all var(--transition-fast);
   font-size: 12px;
   color: #666;
   flex-shrink: 0;
@@ -1194,15 +1194,15 @@ onMounted(() => {
 
 .step-indicator:hover .expand-btn {
   opacity: 1;
-  color: #1890ff;
+  color: var(--primary-color-1);
 }
 
 .step-details {
   margin-top: 12px;
-  padding: 16px;
-  background: #fafafa;
-  border-radius: 8px;
-  border: 1px solid #f0f0f0;
+  padding: var(--spacing-4);
+  background: var(--bg-secondary);
+  border-radius: var(--border-radius-md);
+  border: 1px solid var(--border-color-light);
   margin-left: 28px;
 }
 
@@ -1243,15 +1243,15 @@ onMounted(() => {
 }
 
 .detail-content pre {
-  background: #f8f8f8;
-  padding: 8px;
-  border-radius: 4px;
+  background: var(--bg-tertiary);
+  padding: var(--spacing-2);
+  border-radius: var(--border-radius-sm);
   font-family: 'Courier New', monospace;
   font-size: 12px;
   overflow-x: auto;
   margin: 0;
   white-space: pre-wrap;
-  border: 1px solid #e8e8e8;
+  border: 1px solid var(--border-color-light);
 }
 
 .error-text {

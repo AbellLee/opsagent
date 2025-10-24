@@ -238,7 +238,7 @@ const formatTime = (time) => {
   justify-content: space-between;
   align-items: center;
   padding: 20px 24px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, var(--primary-color-1) 0%, var(--primary-color-2) 100%);
   color: white;
   border: none;
   position: relative;
@@ -248,6 +248,7 @@ const formatTime = (time) => {
   min-height: 80px;
   max-height: 80px;
   box-sizing: border-box;
+  border-radius: var(--border-radius-lg) var(--border-radius-lg) 0 0;
 }
 
 .session-list-header::before {
@@ -259,6 +260,7 @@ const formatTime = (time) => {
   bottom: 0;
   background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><pattern id="grain" width="100" height="100" patternUnits="userSpaceOnUse"><circle cx="25" cy="25" r="1" fill="white" opacity="0.1"/><circle cx="75" cy="75" r="1" fill="white" opacity="0.1"/><circle cx="50" cy="10" r="0.5" fill="white" opacity="0.1"/></pattern></defs><rect width="100" height="100" fill="url(%23grain)"/></svg>');
   opacity: 0.3;
+  border-radius: var(--border-radius-lg) var(--border-radius-lg) 0 0;
 }
 
 .session-list-header > * {
@@ -289,16 +291,19 @@ const formatTime = (time) => {
   border: 1px solid rgba(255, 255, 255, 0.3) !important;
   color: white !important;
   backdrop-filter: blur(10px);
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  border-radius: 12px !important;
+  transition: all var(--transition-normal);
+  border-radius: var(--border-radius-md) !important;
   font-weight: 500;
-  padding: 8px 12px !important;
+  padding: var(--spacing-2) var(--spacing-3) !important;
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-1);
 }
 
 .new-session-btn:hover {
   background: rgba(255, 255, 255, 0.3) !important;
   transform: translateY(-2px);
-  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.2);
+  box-shadow: var(--shadow-md);
 }
 
 /* 收起状态的新建会话按钮 */
@@ -307,7 +312,7 @@ const formatTime = (time) => {
   border: 1px solid rgba(255, 255, 255, 0.3) !important;
   color: white !important;
   backdrop-filter: blur(10px);
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: all var(--transition-normal);
   border-radius: 50% !important;
   width: 40px !important;
   height: 40px !important;
@@ -320,20 +325,21 @@ const formatTime = (time) => {
 .new-session-btn-collapsed:hover {
   background: rgba(255, 255, 255, 0.3) !important;
   transform: scale(1.1);
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
+  box-shadow: var(--shadow-md);
 }
 
 /* 会话项美化 */
 .n-list-item {
-  padding: 16px 24px !important;
+  padding: var(--spacing-4) var(--spacing-5) !important;
   cursor: pointer;
   border: none !important;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: all var(--transition-normal);
   position: relative;
   overflow: hidden;
-  margin: 0 8px;
-  border-radius: 12px !important;
-  margin-bottom: 4px;
+  margin: 0 var(--spacing-2);
+  border-radius: var(--border-radius-md) !important;
+  margin-bottom: var(--spacing-1);
+  backdrop-filter: blur(10px);
 }
 
 .n-list-item::before {
@@ -343,11 +349,11 @@ const formatTime = (time) => {
   left: 0;
   right: 0;
   bottom: 0;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, var(--primary-color-1) 0%, var(--primary-color-2) 100%);
   opacity: 0;
-  transition: opacity 0.3s ease;
+  transition: opacity var(--transition-normal);
   z-index: 0;
-  border-radius: 12px;
+  border-radius: var(--border-radius-md);
 }
 
 .n-list-item:hover::before {
@@ -365,14 +371,14 @@ const formatTime = (time) => {
 
 .n-list-item:hover {
   transform: translateX(4px);
-  box-shadow: 4px 0 20px rgba(102, 126, 234, 0.15);
+  box-shadow: 4px 0 12px rgba(168, 216, 234, 0.1);
 }
 
 .n-list-item.active {
-  background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%) !important;
-  border-right: 4px solid #667eea !important;
+  background: linear-gradient(135deg, rgba(168, 216, 234, 0.1) 0%, rgba(170, 150, 218, 0.1) 100%) !important;
+  border-right: 4px solid var(--primary-color-1) !important;
   transform: translateX(4px);
-  box-shadow: 4px 0 25px rgba(102, 126, 234, 0.25);
+  box-shadow: var(--shadow-md);
 }
 
 /* 会话名称和时间美化 */
@@ -391,9 +397,9 @@ const formatTime = (time) => {
 /* 会话操作按钮美化 */
 .n-list-item .n-button {
   opacity: 0 !important;
-  transition: all 0.3s ease !important;
-  transform: translateX(8px) !important;
-  border-radius: 8px !important;
+  transition: all var(--transition-normal) !important;
+  transform: translateX(var(--spacing-2)) !important;
+  border-radius: var(--border-radius-sm) !important;
 }
 
 .n-list-item:hover .n-button {
@@ -411,6 +417,14 @@ html.dark .session-list-header {
   background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
 }
 
+html.dark .n-list-item {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+html.dark .n-list-item:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
 html.dark .n-list-item .n-ellipsis {
   color: #e2e8f0 !important;
 }
@@ -421,5 +435,24 @@ html.dark .n-list-item div[style*="font-size: 12px"] {
 
 html.dark .n-list-item .n-button:hover {
   background: rgba(102, 126, 234, 0.2) !important;
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .session-list-header {
+    padding: var(--spacing-4) var(--spacing-3);
+    height: 60px;
+    min-height: 60px;
+    max-height: 60px;
+  }
+  
+  .session-list-header h4 {
+    font-size: var(--font-size-lg);
+  }
+  
+  .n-list-item {
+    padding: var(--spacing-3) var(--spacing-4) !important;
+    margin: 0 var(--spacing-1);
+  }
 }
 </style>

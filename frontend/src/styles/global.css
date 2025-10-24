@@ -3,7 +3,7 @@
   height: 100vh;
   width: 100vw;
   overflow: hidden;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, #a8d8ea 0%, #aa96da 100%);
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
   display: flex;
   flex-direction: column;
@@ -60,10 +60,10 @@ body {
 /* Content 区域美化 - 修复布局 */
 .n-layout-content {
   background: rgba(255, 255, 255, 0.95) !important;
-  backdrop-filter: blur(20px);
-  border-radius: 20px !important;
+  backdrop-filter: blur(12px);
+  border-radius: 16px !important;
   margin: 0 12px 12px 8px !important;
-  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.12);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
   overflow: hidden;
   height: calc(100vh - 92px) !important;
   max-height: calc(100vh - 92px) !important;
@@ -92,13 +92,13 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, #a8d8ea 0%, #aa96da 100%);
   border-radius: 3px;
   transition: all 0.3s ease;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: linear-gradient(135deg, #5a6fd8 0%, #6a4c93 100%);
+  background: linear-gradient(135deg, #a8d8ea 0%, #fcbad3 100%);
 }
 
 /* 暗色模式滚动条 */
@@ -111,14 +111,14 @@ html.dark ::-webkit-scrollbar-thumb {
 }
 
 html.dark ::-webkit-scrollbar-thumb:hover {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, #a8d8ea 0%, #aa96da 100%);
 }
 
 /* 页面加载动画 */
 @keyframes fadeInUp {
   from {
     opacity: 0;
-    transform: translateY(30px);
+    transform: translateY(20px);
   }
   to {
     opacity: 1;
@@ -129,7 +129,7 @@ html.dark ::-webkit-scrollbar-thumb:hover {
 @keyframes slideInLeft {
   from {
     opacity: 0;
-    transform: translateX(-30px);
+    transform: translateX(-20px);
   }
   to {
     opacity: 1;
@@ -140,7 +140,7 @@ html.dark ::-webkit-scrollbar-thumb:hover {
 @keyframes slideInRight {
   from {
     opacity: 0;
-    transform: translateX(30px);
+    transform: translateX(20px);
   }
   to {
     opacity: 1;
@@ -150,27 +150,27 @@ html.dark ::-webkit-scrollbar-thumb:hover {
 
 /* 应用动画 */
 .n-layout-header {
-  animation: fadeInUp 0.6s ease-out;
+  animation: fadeInUp 0.3s ease-out;
 }
 
 .n-layout-sider {
-  animation: slideInLeft 0.6s ease-out;
+  animation: slideInLeft 0.3s ease-out;
 }
 
 .n-layout-content {
-  animation: slideInRight 0.6s ease-out;
+  animation: slideInRight 0.3s ease-out;
 }
 
 .n-list-item {
-  animation: fadeInUp 0.4s ease-out;
+  animation: fadeInUp 0.3s ease-out;
   animation-fill-mode: both;
 }
 
-.n-list-item:nth-child(1) { animation-delay: 0.1s; }
-.n-list-item:nth-child(2) { animation-delay: 0.2s; }
-.n-list-item:nth-child(3) { animation-delay: 0.3s; }
-.n-list-item:nth-child(4) { animation-delay: 0.4s; }
-.n-list-item:nth-child(5) { animation-delay: 0.5s; }
+.n-list-item:nth-child(1) { animation-delay: 0.05s; }
+.n-list-item:nth-child(2) { animation-delay: 0.1s; }
+.n-list-item:nth-child(3) { animation-delay: 0.15s; }
+.n-list-item:nth-child(4) { animation-delay: 0.2s; }
+.n-list-item:nth-child(5) { animation-delay: 0.25s; }
 
 /* 暗色模式美化 */
 html.dark #app {
@@ -178,6 +178,6 @@ html.dark #app {
 }
 
 html.dark .n-layout-content {
-  background: rgba(30, 30, 30, 0.95) !important;
-  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.3);
+  background: rgba(30, 30, 30, 0.9) !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
 }
