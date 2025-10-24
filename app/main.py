@@ -99,6 +99,6 @@ if __name__ == "__main__":
         timeout_keep_alive=1,
         timeout_graceful_shutdown=1,
         limit_concurrency=50,
-        limit_max_requests=100,
+        limit_max_requests=10000,
         h11_max_incomplete_event_size=16384,
     )

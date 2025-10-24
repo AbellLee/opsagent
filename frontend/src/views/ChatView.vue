@@ -429,7 +429,8 @@ const sendMessageAndGetReply = async (messageContent) => {
 
     // 发送消息到后端获取AI回复
     const response = await messageAPI.send(sessionStore.sessionId, {
-      message: messageContent
+      message: messageContent,
+      response_mode: 'blocking'
     })
 
     // 添加AI回复

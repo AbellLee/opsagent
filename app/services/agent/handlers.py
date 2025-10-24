@@ -93,9 +93,25 @@ async def handle_blocking_chat(session_id: UUID, inputs: Dict[str, Any], config:
                 "sender": "AI助手"
             }
 
+        # 将消息内容转换为字符串格式
+        if isinstance(response_message, dict):
+            # 如果是字典，提取content字段或转换为JSON字符串
+            response_content = response_message.get("content", "")
+            if isinstance(response_content, list):
+                # 如果content是列表，提取其中的文本内容
+                text_contents = [item.get("content", "") for item in response_content if item.get("type") == "text"]
+                response_content = "\n".join(text_contents)
+            elif not isinstance(response_content, str):
+                # 如果content不是字符串，转换为JSON字符串
+                import json
+                response_content = json.dumps(response_content, ensure_ascii=False)
+        else:
+            # 如果不是字典，直接转换为字符串
+            response_content = str(response_message)
+
         return ChatCompletionResponse(
             session_id=str(session_id),
-            response=response_message,  # 返回完整的消息对象
+            response=response_content,  # 返回字符串格式的响应
             status="success",
             created_at=time.time(),
             model="tongyi"
