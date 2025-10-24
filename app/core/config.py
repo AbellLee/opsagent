@@ -11,10 +11,6 @@ class Settings(BaseSettings):
     # 数据库配置
     database_url: str = os.getenv("DATABASE_URL", "postgresql://opsagent:opsagent@localhost:5432/opsagent")
     
-    # 通义千问配置（保持向后兼容）
-    tongyi_api_key: Optional[str] = os.getenv("DASHSCOPE_API_KEY")
-    tongyi_model_name: str = os.getenv("TONGYI_MODEL_NAME", "qwen-plus")
-    
     # 新的LLM配置
     llm_type: str = os.getenv("LLM_TYPE", "tongyi")
     llm_api_key: Optional[str] = os.getenv("LLM_API_KEY")
@@ -23,6 +19,11 @@ class Settings(BaseSettings):
     llm_embedding_model: Optional[str] = os.getenv("LLM_EMBEDDING_MODEL")
     llm_timeout: int = int(os.getenv("LLM_TIMEOUT", "60"))
     llm_max_retries: int = int(os.getenv("LLM_MAX_RETRIES", "2"))
+    
+    # 各平台特定的API密钥环境变量
+    openai_api_key: Optional[str] = os.getenv("OPENAI_API_KEY")
+    deepseek_api_key: Optional[str] = os.getenv("DEEPSEEK_API_KEY")
+    dashscope_api_key: Optional[str] = os.getenv("DASHSCOPE_API_KEY")
     
     # API配置
     api_key: Optional[str] = os.getenv("API_KEY")

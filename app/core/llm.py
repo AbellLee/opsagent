@@ -1,144 +1,150 @@
-from langchain_openai import ChatOpenAI, OpenAIEmbeddings
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Dict, Any
 import logging
 import os
 
-# 设置日志
 logger = logging.getLogger(__name__)
 
-# 模型配置字典
-MODEL_CONFIGS = {
-    "openai": {
-        "base_url": "https://api.openai.com/v1",
-        "api_key_env": "LLM_API_KEY",  # 统一使用LLM_API_KEY
-        "default_chat_model": "gpt-4o-mini",
-        "default_embedding_model": "text-embedding-3-small"
-    },
-    "oneapi": {
-        "base_url": None,  # 需要从环境变量获取
-        "api_key_env": "LLM_API_KEY",  # 统一使用LLM_API_KEY
-        "default_chat_model": "qwen-plus",
-        "default_embedding_model": "text-embedding-v1"
-    },
-    "tongyi": {
-        "base_url": None,  # 从环境变量LLM_URL获取
-        "api_key_env": "LLM_API_KEY",  # 统一使用LLM_API_KEY，也兼容DASHSCOPE_API_KEY
-        "default_chat_model": None,  # 从环境变量LLM_MODEL获取
-        "default_embedding_model": "text-embedding-v1"
-    },
-    "custom": {
-        "base_url": None,  # 需要从环境变量获取
-        "api_key_env": "LLM_API_KEY",  # 统一使用LLM_API_KEY
-        "default_chat_model": None,  # 需要从环境变量获取
-        "default_embedding_model": None  # 需要从环境变量获取
-    }
+class LLMConfig:
+    """LLM配置类，用于管理不同供应商的默认配置"""
+    def __init__(
+        self,
+        default_chat_model: Optional[str] = None,
+        default_embedding_model: Optional[str] = None,
+        provider_package: Optional[str] = None,
+        needs_base_url: bool = True,
+        api_key_env_fallbacks: Optional[list] = None,
+    ):
+        self.default_chat_model = default_chat_model
+        self.default_embedding_model = default_embedding_model
+        self.provider_package = provider_package
+        self.needs_base_url = needs_base_url
+        self.api_key_env_fallbacks = api_key_env_fallbacks or []
+
+# 模型配置字典（仅保留默认值，环境变量优先）
+MODEL_CONFIGS: Dict[str, LLMConfig] = {
+    "openai": LLMConfig(
+        default_chat_model="gpt-4o-mini",
+        default_embedding_model="text-embedding-3-small",
+        provider_package="langchain_openai",
+        needs_base_url=True,
+        api_key_env_fallbacks=["OPENAI_API_KEY"],
+    ),
+    "deepseek": LLMConfig(
+        default_chat_model="deepseek-chat",
+        default_embedding_model=None,
+        provider_package="langchain_deepseek",
+        needs_base_url=True,
+        api_key_env_fallbacks=["DEEPSEEK_API_KEY"],
+    ),
+    "ollama": LLMConfig(
+        default_chat_model="llama3",
+        default_embedding_model=None,
+        provider_package="langchain_ollama",
+        needs_base_url=True,
+        api_key_env_fallbacks=[],
+    ),
+    "tongyi": LLMConfig(
+        default_chat_model="qwen-turbo",
+        default_embedding_model="text-embedding-v1",
+        provider_package="langchain_community.chat_models.tongyi",
+        needs_base_url=False,  # 通义不需要 base_url
+        api_key_env_fallbacks=["DASHSCOPE_API_KEY"],
+    ),
+    "vllm": LLMConfig(
+        default_chat_model="llama3",
+        default_embedding_model=None,
+        provider_package="langchain_openai",
+        needs_base_url=True,
+        api_key_env_fallbacks=["VLLM_API_KEY"],
+    ),
 }
 
-# 默认配置
 DEFAULT_LLM_TYPE = "tongyi"
 DEFAULT_TEMPERATURE = 0.7
-DEFAULT_TIMEOUT = 60  # 默认60秒超时
-DEFAULT_MAX_RETRIES = 2  # 默认重试2次
+DEFAULT_TIMEOUT = 60
+DEFAULT_MAX_RETRIES = 2
 
 class LLMInitializationError(Exception):
-    """自定义异常类用于LLM初始化错误"""
     pass
 
-# 存储预初始化的LLM实例
 _pre_initialized_llm = None
 _pre_initialized_embedding = None
 
 def set_pre_initialized_llm(llm, embedding):
-    """
-    设置预初始化的LLM实例
-    
-    Args:
-        llm: 预初始化的LLM实例
-        embedding: 预初始化的嵌入模型实例
-    """
     global _pre_initialized_llm, _pre_initialized_embedding
     _pre_initialized_llm = llm
     _pre_initialized_embedding = embedding
 
 def get_pre_initialized_llm():
-    """
-    获取预初始化的LLM实例
-    
-    Returns:
-        Tuple[ChatOpenAI, OpenAIEmbeddings]: 预初始化的LLM和嵌入模型实例
-    """
     global _pre_initialized_llm, _pre_initialized_embedding
     return _pre_initialized_llm, _pre_initialized_embedding
 
-def initialize_llm(llm_type: str = DEFAULT_LLM_TYPE) -> Tuple[ChatOpenAI, OpenAIEmbeddings]:
-    """
-    初始化LLM实例
-    
-    Args:
-        llm_type (str): LLM类型
-        
-    Returns:
-        Tuple[ChatOpenAI, OpenAIEmbeddings]: LLM和嵌入模型实例
-        
-    Raises:
-        LLMInitializationError: 当LLM初始化失败时抛出
-    """
+def _resolve_api_key(llm_type: str, config: LLMConfig) -> str:
+    # 优先使用统一的 LLM_API_KEY
+    api_key = os.getenv("LLM_API_KEY")
+    if api_key:
+        return api_key
+
+    # 尝试 fallback 环境变量
+    for env_var in config.api_key_env_fallbacks:
+        key = os.getenv(env_var)
+        if key:
+            return key
+
+    # vLLM 特殊处理：默认为 "EMPTY"
+    if llm_type == "vllm":
+        return "EMPTY"
+
+    # 构建错误信息
+    attempted = ["LLM_API_KEY"] + config.api_key_env_fallbacks
+    raise ValueError(f"缺少API密钥。尝试了环境变量: {', '.join(attempted)}")
+
+def _resolve_base_url(llm_type: str, config: LLMConfig) -> Optional[str]:
+    if not config.needs_base_url:
+        return None
+
+    # 优先从环境变量获取
+    base_url = os.getenv("LLM_BASE_URL") or os.getenv("LLM_URL")
+    if base_url:
+        return base_url.strip()
+
+    # 各模型默认地址（仅当无环境变量时使用）
+    defaults = {
+        "ollama": "http://localhost:11434/v1",
+        "vllm": "http://localhost:8000/v1",
+        "openai": "https://api.openai.com/v1",
+        "deepseek": "https://api.deepseek.com/v1",
+    }
+    return defaults.get(llm_type)
+
+def _resolve_models(config: LLMConfig) -> Tuple[Optional[str], Optional[str]]:
+    chat_model = os.getenv("LLM_MODEL") or config.default_chat_model
+    embedding_model = os.getenv("LLM_EMBEDDING_MODEL") or config.default_embedding_model
+    return chat_model, embedding_model
+
+def initialize_llm(llm_type: str = DEFAULT_LLM_TYPE) -> Tuple[Any, Optional[Any]]:
+    if llm_type not in MODEL_CONFIGS:
+        raise ValueError(f"不支持的LLM类型: {llm_type}. 支持: {list(MODEL_CONFIGS.keys())}")
+
+    config = MODEL_CONFIGS[llm_type]
+
     try:
-        # 检查llm_type是否有效
-        if llm_type not in MODEL_CONFIGS:
-            raise ValueError(f"不支持的LLM类型: {llm_type}. 可用的类型: {list(MODEL_CONFIGS.keys())}")
+        api_key = _resolve_api_key(llm_type, config)
+        base_url = _resolve_base_url(llm_type, config)
+        chat_model, embedding_model = _resolve_models(config)
 
-        config = MODEL_CONFIGS[llm_type]
-        
-        # 获取API密钥（优先使用LLM_API_KEY）
-        api_key = os.getenv("LLM_API_KEY")
-        
-        # 如果没有找到LLM_API_KEY，根据llm_type尝试其他可能的环境变量
-        if not api_key:
-            if llm_type in ["tongyi", "qwen"]:
-                # 兼容阿里云的DASHSCOPE_API_KEY
-                api_key = os.getenv("DASHSCOPE_API_KEY")
-            elif llm_type == "openai":
-                # 兼容OpenAI的原始环境变量
-                api_key = os.getenv("OPENAI_API_KEY")
-                
-        if not api_key:
-            # 构建详细的错误消息，包含所有尝试过的环境变量名
-            attempted_vars = ["LLM_API_KEY"]
-            if llm_type in ["tongyi", "qwen"]:
-                attempted_vars.append("DASHSCOPE_API_KEY")
-            if llm_type == "openai":
-                attempted_vars.append("OPENAI_API_KEY")
-                
-            raise ValueError(f"缺少API密钥环境变量。已尝试查找: {', '.join(attempted_vars)}")
+        if config.needs_base_url and not base_url:
+            raise ValueError("该模型类型需要 base_url，但未通过 LLM_BASE_URL 环境变量或默认值提供")
 
-        # 获取base_url（如果需要）
-        base_url = config["base_url"] or os.getenv("LLM_URL") or os.getenv("LLM_BASE_URL")
-        if not base_url and llm_type in ["custom", "tongyi"]:
-            env_vars = ["LLM_URL", "LLM_BASE_URL"]
-            raise ValueError(f"缺少base_url配置或环境变量: {', '.join(env_vars)}")
+        if not chat_model:
+            raise ValueError("未指定聊天模型（通过 LLM_MODEL 环境变量或默认配置）")
 
-        # 获取模型名称（优先使用环境变量LLM_MODEL，否则使用默认值）
-        chat_model = os.getenv("LLM_MODEL") or config["default_chat_model"]
-        if not chat_model and llm_type in ["custom", "tongyi"]:
-            raise ValueError(f"缺少chat_model配置或环境变量LLM_MODEL")
-
-        embedding_model = os.getenv("LLM_EMBEDDING_MODEL") or config["default_embedding_model"]
-        if not embedding_model and llm_type == "custom":
-            raise ValueError(f"缺少embedding_model配置或环境变量")
-
-        # 获取超时配置（可通过环境变量覆盖）
         timeout = int(os.getenv("LLM_TIMEOUT", DEFAULT_TIMEOUT))
         max_retries = int(os.getenv("LLM_MAX_RETRIES", DEFAULT_MAX_RETRIES))
 
-        # 特殊处理 tongyi 类型（使用ChatOpenAI兼容模式）
-        if llm_type == "tongyi":
-            # 确保dashscope相关的环境变量都设置好
-            os.environ['DASHSCOPE_API_KEY'] = api_key
-            if 'LLM_API_KEY' not in os.environ:
-                os.environ['LLM_API_KEY'] = api_key
-
-            # 使用ChatOpenAI兼容模式，支持流式输出
+        # 初始化具体 LLM
+        if llm_type == "openai":
+            from langchain_openai import ChatOpenAI, OpenAIEmbeddings
             llm = ChatOpenAI(
                 base_url=base_url,
                 api_key=api_key,
@@ -146,64 +152,78 @@ def initialize_llm(llm_type: str = DEFAULT_LLM_TYPE) -> Tuple[ChatOpenAI, OpenAI
                 temperature=DEFAULT_TEMPERATURE,
                 timeout=timeout,
                 max_retries=max_retries,
-                streaming=True  # 启用流式支持
             )
-            # Tongyi不支持嵌入模型，返回None
-            return llm, None
+            embedding = (
+                OpenAIEmbeddings(base_url=base_url, api_key=api_key, model=embedding_model)
+                if embedding_model else None
+            )
 
-        # 创建LLM实例
-        llm = ChatOpenAI(
-            base_url=base_url,
-            api_key=api_key,
-            model=chat_model,
-            temperature=DEFAULT_TEMPERATURE,
-            timeout=timeout,
-            max_retries=max_retries
-        )
+        elif llm_type == "deepseek":
+            from langchain_deepseek import ChatDeepSeek
+            llm = ChatDeepSeek(
+                api_key=api_key,
+                model=chat_model,
+                temperature=DEFAULT_TEMPERATURE,
+                timeout=timeout,
+                max_retries=max_retries,
+            )
+            embedding = None
 
-        # 创建嵌入模型实例
-        embedding = OpenAIEmbeddings(
-            base_url=base_url,
-            api_key=api_key,
-            model=embedding_model
-        )
+        elif llm_type == "ollama":
+            from langchain_ollama import ChatOllama
+            llm = ChatOllama(
+                base_url=base_url,
+                model=chat_model,
+                temperature=DEFAULT_TEMPERATURE,
+                timeout=timeout,
+            )
+            embedding = None
 
-        logger.info(f"成功初始化 {llm_type} LLM，模型: {chat_model}，超时: {timeout}秒，重试: {max_retries}次")
+        elif llm_type == "tongyi":
+            from langchain_community.chat_models import ChatTongyi
+            # 通义千问通过 DASHSCOPE_API_KEY 或 LLM_API_KEY 设置
+            os.environ["DASHSCOPE_API_KEY"] = api_key  # 确保底层能读到
+            llm = ChatTongyi(
+                model=chat_model,
+                temperature=DEFAULT_TEMPERATURE,
+                timeout=timeout,
+                max_retries=max_retries,
+            )
+            embedding = None
+
+        elif llm_type == "vllm":
+            from langchain_openai import ChatOpenAI
+            llm = ChatOpenAI(
+                base_url=base_url,
+                api_key=api_key,
+                model=chat_model,
+                temperature=DEFAULT_TEMPERATURE,
+                timeout=timeout,
+                max_retries=max_retries,
+            )
+            embedding = None
+
+        logger.info(f"成功初始化 {llm_type} LLM，模型: {chat_model}，base_url: {base_url}")
         return llm, embedding
 
-    except ValueError as ve:
-        logger.error(f"LLM配置错误: {str(ve)}")
-        raise LLMInitializationError(f"LLM配置错误: {str(ve)}")
     except Exception as e:
-        logger.error(f"初始化LLM失败: {str(e)}")
-        raise LLMInitializationError(f"初始化LLM失败: {str(e)}")
+        logger.error(f"初始化LLM失败 ({llm_type}): {e}")
+        raise LLMInitializationError(f"初始化LLM失败: {e}")
 
-def get_llm(llm_type: Optional[str] = None) -> Tuple[ChatOpenAI, OpenAIEmbeddings]:
-    """
-    获取LLM实例的封装函数
-    优先使用预初始化的实例，如果没有则进行初始化
-    
-    Args:
-        llm_type (str, optional): LLM类型
-        
-    Returns:
-        Tuple[ChatOpenAI, OpenAIEmbeddings]: LLM和嵌入模型实例
-    """
-    # 首先尝试获取预初始化的实例
+def get_llm(llm_type: Optional[str] = None) -> Tuple[Any, Optional[Any]]:
     pre_llm, pre_embedding = get_pre_initialized_llm()
     if pre_llm is not None:
         return pre_llm, pre_embedding
-    
-    from app.core.config import settings
-    
-    # 如果没有指定llm_type，则从配置中获取
+
+    # 从 settings 或环境变量获取 llm_type
     if not llm_type:
-        llm_type = getattr(settings, 'llm_type', DEFAULT_LLM_TYPE)
-    
+        from app.core.config import settings
+        llm_type = getattr(settings, 'llm_type', os.getenv("LLM_TYPE", DEFAULT_LLM_TYPE))
+
     try:
         return initialize_llm(llm_type)
     except LLMInitializationError:
-        logger.warning(f"使用默认配置重试: {llm_type}")
         if llm_type != DEFAULT_LLM_TYPE:
+            logger.warning(f"回退到默认 LLM 类型: {DEFAULT_LLM_TYPE}")
             return initialize_llm(DEFAULT_LLM_TYPE)
         raise

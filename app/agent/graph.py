@@ -9,6 +9,7 @@ from app.core.logger import logger
 from app.agent.state import AgentState
 from app.core.llm import get_llm, LLMInitializationError
 from langgraph.types import interrupt
+import os
 
 
 # ========================
@@ -58,8 +59,22 @@ def create_call_model_with_tools(tools: List[BaseTool]):
 
             # 绑定工具到模型
             if tools:
-                model_with_tools = llm.bind_tools(tools)
-                logger.info(f"已绑定 {len(tools)} 个工具到模型")
+                # 针对vLLM的特殊处理，避免使用"auto"工具选择模式
+                # 因为vLLM需要额外的服务器端配置才能支持"auto"模式
+                from app.core.config import settings
+                llm_type = getattr(settings, 'llm_type', os.getenv("LLM_TYPE", "tongyi"))
+                
+                # 对于vLLM，暂时不使用工具，因为存在JSON格式问题
+                if llm_type == "vllm":
+                    model_with_tools = llm
+                    logger.info("使用vLLM，暂时不绑定工具以避免JSON格式问题")
+                else:
+                    try:
+                        model_with_tools = llm.bind_tools(tools)
+                        logger.info(f"已绑定 {len(tools)} 个工具到模型")
+                    except Exception as bind_error:
+                        logger.warning(f"绑定工具到模型时出错: {bind_error}，将使用无工具的模型")
+                        model_with_tools = llm
             else:
                 model_with_tools = llm
                 logger.warning("未找到工具列表，使用无工具的模型")
