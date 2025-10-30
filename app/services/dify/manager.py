@@ -23,6 +23,7 @@ class DifyAgentConfig:
     capabilities: List[str]
     keywords: List[str]
     config: Dict[str, Any]
+    input_schema: Optional[Dict[str, Any]]  # inputs 参数的 Schema 定义
     enabled: bool
     priority: int
     created_at: datetime
@@ -77,7 +78,7 @@ class DifyAgentManager:
                         SELECT
                             id, name, description, agent_type, dify_app_id,
                             api_key, base_url, capabilities, keywords, config,
-                            enabled, priority, created_at, updated_at
+                            input_schema, enabled, priority, created_at, updated_at
                         FROM dify_agents
                         WHERE enabled = true
                         ORDER BY priority DESC, created_at ASC
@@ -97,6 +98,7 @@ class DifyAgentManager:
                             capabilities=row["capabilities"] or [],
                             keywords=row["keywords"] or [],
                             config=row["config"] or {},
+                            input_schema=row["input_schema"],
                             enabled=row["enabled"],
                             priority=row["priority"],
                             created_at=row["created_at"],
@@ -233,6 +235,7 @@ class DifyAgentManager:
         capabilities: Optional[List[str]] = None,
         keywords: Optional[List[str]] = None,
         config: Optional[Dict[str, Any]] = None,
+        input_schema: Optional[Dict[str, Any]] = None,
         priority: int = 0,
         created_by: Optional[str] = None,
     ) -> str:
@@ -249,11 +252,12 @@ class DifyAgentManager:
                 cursor.execute("""
                     INSERT INTO dify_agents (
                         name, description, agent_type, dify_app_id, api_key, base_url,
-                        capabilities, keywords, config, priority, created_by
-                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        capabilities, keywords, config, input_schema, priority, created_by
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     RETURNING id
                 """, (name, description, agent_type, dify_app_id, api_key, base_url,
                       capabilities or [], keywords or [], psycopg2.extras.Json(config or {}),
+                      psycopg2.extras.Json(input_schema) if input_schema else None,
                       priority, created_by))
 
                 row = cursor.fetchone()
@@ -292,15 +296,15 @@ class DifyAgentManager:
 
         allowed_fields = [
             "name", "description", "agent_type", "dify_app_id", "api_key", "base_url",
-            "capabilities", "keywords", "config", "enabled", "priority"
+            "capabilities", "keywords", "config", "input_schema", "enabled", "priority"
         ]
 
         for field in allowed_fields:
             if field in kwargs:
                 update_fields.append(f"{field} = %s")
                 # 特殊处理 JSONB 字段
-                if field == "config":
-                    values.append(psycopg2.extras.Json(kwargs[field]))
+                if field in ["config", "input_schema"]:
+                    values.append(psycopg2.extras.Json(kwargs[field]) if kwargs[field] else None)
                 else:
                     values.append(kwargs[field])
 

@@ -14,7 +14,8 @@ CREATE TABLE IF NOT EXISTS dify_agents (
     
     -- 配置参数
     config JSONB DEFAULT '{}', -- 额外配置，如温度、最大token等
-    
+    input_schema JSONB DEFAULT NULL, -- inputs 参数的 Schema 定义
+
     -- 状态管理
     enabled BOOLEAN DEFAULT true,
     priority INTEGER DEFAULT 0, -- 优先级，数字越大优先级越高
@@ -40,6 +41,7 @@ COMMENT ON COLUMN dify_agents.agent_type IS 'Agent 类型: chatbot(对话型), w
 COMMENT ON COLUMN dify_agents.capabilities IS '能力标签数组，用于 Supervisor 路由决策';
 COMMENT ON COLUMN dify_agents.keywords IS '关键词数组，用于匹配用户输入';
 COMMENT ON COLUMN dify_agents.priority IS '优先级，当多个 Agent 匹配时选择优先级高的';
+COMMENT ON COLUMN dify_agents.input_schema IS 'inputs 参数的 Schema 定义，格式: {"param_name": {"type": "string", "required": true, "description": "说明"}}';
 
 -- 插入示例数据（可选）
 INSERT INTO dify_agents (name, description, agent_type, dify_app_id, api_key, capabilities, keywords, priority)

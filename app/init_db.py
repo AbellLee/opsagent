@@ -124,6 +124,7 @@ def create_tables():
                 capabilities TEXT[],
                 keywords TEXT[],
                 config JSONB DEFAULT '{}',
+                input_schema JSONB DEFAULT NULL,
                 enabled BOOLEAN DEFAULT true,
                 priority INTEGER DEFAULT 0,
                 created_by UUID REFERENCES users(user_id),

@@ -18,18 +18,14 @@ class DifyClient:
         初始化 Dify 客户端
 
         Args:
-            base_url: Dify API 基础 URL (例如: https://api.dify.ai/v1 或 https://wsc-dify.300624.cn/)
+            base_url: Dify API 基础 URL (完全按照 Dify 官方文档提供的 URL，例如: https://api.dify.ai/v1 或 https://oms-dify.300624.cn//v1)
             api_key: Dify API Key
             timeout: 请求超时时间(秒)
         """
-        # 规范化 base_url
-        # 如果已经包含 /v1，则去掉尾部斜杠
-        # 如果不包含 /v1，则添加 /v1
-        base_url = base_url.rstrip("/")
-        if not base_url.endswith("/v1"):
-            base_url = f"{base_url}/v1"
-
-        self.base_url = base_url
+        # 完全不修改 base_url，按照 Dify 官方文档使用
+        # 只去掉尾部斜杠（如果有）
+        self.base_url = base_url.rstrip("/")
+        logger.debug(f"Dify base_url: {self.base_url}")
         self.api_key = api_key
         self.timeout = timeout
         self._client: Optional[httpx.AsyncClient] = None

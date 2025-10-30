@@ -40,8 +40,13 @@ async def create_dify_agent(
             capabilities=agent_data.capabilities,
             keywords=agent_data.keywords,
             config=agent_data.config,
+            input_schema=agent_data.input_schema,
             priority=agent_data.priority,
         )
+
+        # 清空工具缓存
+        from app.agent.tools import dify_tool_manager
+        dify_tool_manager.clear_cache()
 
         # 获取创建的 Agent
         agent = await manager.get_agent_by_id(agent_id)
@@ -64,6 +69,7 @@ async def create_dify_agent(
             capabilities=agent.capabilities,
             keywords=agent.keywords,
             config=agent.config,
+            input_schema=agent.input_schema,
             enabled=agent.enabled,
             priority=agent.priority,
             created_at=agent.created_at,
@@ -104,6 +110,7 @@ async def list_dify_agents(
                 capabilities=agent.capabilities,
                 keywords=agent.keywords,
                 config=agent.config,
+                input_schema=agent.input_schema,
                 enabled=agent.enabled,
                 priority=agent.priority,
                 created_at=agent.created_at,
@@ -147,6 +154,7 @@ async def get_dify_agent(
             capabilities=agent.capabilities,
             keywords=agent.keywords,
             config=agent.config,
+            input_schema=agent.input_schema,
             enabled=agent.enabled,
             priority=agent.priority,
             created_at=agent.created_at,
@@ -191,6 +199,10 @@ async def update_dify_agent(
                 detail=f"Dify Agent 不存在: {agent_id}",
             )
 
+        # 清空工具缓存
+        from app.agent.tools import dify_tool_manager
+        dify_tool_manager.clear_cache()
+
         # 获取更新后的 Agent
         agent = await manager.get_agent_by_id(str(agent_id))
         logger.info(f"更新 Dify Agent 成功: {agent.name}")
@@ -206,6 +218,7 @@ async def update_dify_agent(
             capabilities=agent.capabilities,
             keywords=agent.keywords,
             config=agent.config,
+            input_schema=agent.input_schema,
             enabled=agent.enabled,
             priority=agent.priority,
             created_at=agent.created_at,
@@ -240,6 +253,10 @@ async def delete_dify_agent(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Dify Agent 不存在: {agent_id}",
             )
+
+        # 清空工具缓存
+        from app.agent.tools import dify_tool_manager
+        dify_tool_manager.clear_cache()
 
         logger.info(f"删除 Dify Agent 成功: {agent_id}")
 
@@ -337,9 +354,16 @@ async def refresh_agent_cache(db=Depends(get_db)):
     """手动刷新 Dify Agent 配置缓存"""
     try:
         logger.info("收到刷新 Dify Agent 缓存请求")
+
+        # 刷新 DifyAgentManager 缓存
         manager = get_dify_manager()
         await manager.refresh_cache()
         agents = await manager.load_agents()
+
+        # 刷新 DifyToolManager 缓存
+        from app.agent.tools import dify_tool_manager
+        dify_tool_manager.clear_cache()
+
         logger.info(f"刷新缓存成功,当前有 {len(agents)} 个 Dify Agent")
         return {"message": f"缓存刷新成功,当前有 {len(agents)} 个 Dify Agent"}
 

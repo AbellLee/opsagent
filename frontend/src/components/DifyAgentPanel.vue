@@ -113,6 +113,29 @@
           />
         </n-form-item>
 
+        <n-form-item label="输入参数" path="input_schema">
+          <n-space vertical style="width: 100%">
+            <n-text depth="3" style="font-size: 12px">
+              定义 Dify Agent 需要的 inputs 参数（JSON 格式）
+            </n-text>
+            <n-input
+              v-model:value="inputSchemaText"
+              type="textarea"
+              placeholder='{"param_name": {"type": "string", "required": true, "description": "参数描述"}}'
+              :rows="6"
+              :status="inputSchemaError ? 'error' : undefined"
+            />
+            <n-text v-if="inputSchemaError" type="error" style="font-size: 12px">
+              {{ inputSchemaError }}
+            </n-text>
+            <n-collapse>
+              <n-collapse-item title="查看示例" name="example">
+                <n-code :code="inputSchemaExample" language="json" />
+              </n-collapse-item>
+            </n-collapse>
+          </n-space>
+        </n-form-item>
+
         <n-form-item label="启用" path="enabled">
           <n-switch v-model:value="formData.enabled" />
         </n-form-item>
@@ -155,11 +178,22 @@
         </n-space>
       </template>
     </n-modal>
+
+    <!-- 参数详情弹窗 -->
+    <n-modal
+      v-model:show="showSchemaModal"
+      preset="card"
+      title="输入参数详情"
+      style="width: 600px;"
+    >
+      <n-code v-if="selectedSchema" :code="selectedSchema" language="json" />
+      <n-text v-else depth="3">无参数配置</n-text>
+    </n-modal>
   </div>
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, h } from 'vue'
+import { ref, reactive, onMounted, h, computed, watch } from 'vue'
 import {
   NButton,
   NSpace,
@@ -174,7 +208,11 @@ import {
   NDynamicTags,
   NIcon,
   NTag,
-  NPopconfirm
+  NPopconfirm,
+  NText,
+  NCollapse,
+  NCollapseItem,
+  NCode
 } from 'naive-ui'
 import { createDiscreteApi } from 'naive-ui'
 import { Add, Refresh, Edit, Trash, Play } from '@vicons/ionicons5'
@@ -189,12 +227,14 @@ const refreshing = ref(false)
 const showEnabledOnly = ref(false)
 const showCreateModal = ref(false)
 const showTestModal = ref(false)
+const showSchemaModal = ref(false)
 const submitting = ref(false)
 const testing = ref(false)
 const editingAgent = ref(null)
 const testingAgent = ref(null)
 const formRef = ref(null)
 const testMessage = ref('你好')
+const selectedSchema = ref('')
 
 // 表单数据
 const formData = reactive({
@@ -207,7 +247,50 @@ const formData = reactive({
   capabilities: [],
   keywords: [],
   priority: 0,
-  enabled: true
+  enabled: true,
+  input_schema: null
+})
+
+// input_schema 编辑器
+const inputSchemaText = ref('')
+const inputSchemaError = ref('')
+
+// input_schema 示例
+const inputSchemaExample = `{
+  "environment": {
+    "type": "string",
+    "required": true,
+    "description": "部署环境",
+    "enum": ["dev", "test", "prod"]
+  },
+  "region": {
+    "type": "string",
+    "required": false,
+    "description": "区域代码"
+  },
+  "count": {
+    "type": "number",
+    "required": false,
+    "description": "数量"
+  }
+}`
+
+// 监听 inputSchemaText 变化，验证 JSON 格式
+watch(inputSchemaText, (newValue) => {
+  inputSchemaError.value = ''
+
+  if (!newValue || newValue.trim() === '') {
+    formData.input_schema = null
+    return
+  }
+
+  try {
+    const parsed = JSON.parse(newValue)
+    formData.input_schema = parsed
+  } catch (e) {
+    inputSchemaError.value = 'JSON 格式错误: ' + e.message
+    formData.input_schema = null
+  }
 })
 
 // Agent 类型选项
@@ -268,6 +351,25 @@ const columns = [
     title: '优先级',
     key: 'priority',
     width: 70
+  },
+  {
+    title: '参数',
+    key: 'input_schema',
+    width: 80,
+    render: (row) => {
+      if (row.input_schema && Object.keys(row.input_schema).length > 0) {
+        const paramCount = Object.keys(row.input_schema).length
+        return h(NTag, {
+          type: 'success',
+          size: 'small',
+          style: { cursor: 'pointer' },
+          onClick: () => showSchemaDetail(row)
+        }, {
+          default: () => `${paramCount} 个`
+        })
+      }
+      return h(NTag, { type: 'default', size: 'small' }, { default: () => '无' })
+    }
   },
   {
     title: '状态',
@@ -345,6 +447,16 @@ const handleRefreshCache = async () => {
   }
 }
 
+// 显示参数详情
+const showSchemaDetail = (agent) => {
+  if (agent.input_schema) {
+    selectedSchema.value = JSON.stringify(agent.input_schema, null, 2)
+  } else {
+    selectedSchema.value = ''
+  }
+  showSchemaModal.value = true
+}
+
 // 编辑 Agent
 const editAgent = (agent) => {
   editingAgent.value = agent
@@ -358,8 +470,17 @@ const editAgent = (agent) => {
     capabilities: agent.capabilities || [],
     keywords: agent.keywords || [],
     priority: agent.priority,
-    enabled: agent.enabled
+    enabled: agent.enabled,
+    input_schema: agent.input_schema
   })
+
+  // 设置 input_schema 文本
+  if (agent.input_schema) {
+    inputSchemaText.value = JSON.stringify(agent.input_schema, null, 2)
+  } else {
+    inputSchemaText.value = ''
+  }
+
   showCreateModal.value = true
 }
 
@@ -377,14 +498,24 @@ const handleCancel = () => {
     capabilities: [],
     keywords: [],
     priority: 0,
-    enabled: true
+    enabled: true,
+    input_schema: null
   })
+  inputSchemaText.value = ''
+  inputSchemaError.value = ''
 }
 
 // 提交表单
 const handleSubmit = async () => {
   try {
     await formRef.value?.validate()
+
+    // 验证 input_schema
+    if (inputSchemaError.value) {
+      message.error('请修正 input_schema 的 JSON 格式错误')
+      return
+    }
+
     submitting.value = true
 
     if (editingAgent.value) {
@@ -449,7 +580,8 @@ const handleTest = async () => {
   testing.value = true
   try {
     const result = await difyAgentAPI.test(testingAgent.value.id, {
-      message: testMessage.value
+      query: testMessage.value,
+      user_id: 'test_user'
     })
 
     if (result.success) {

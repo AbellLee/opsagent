@@ -1,5 +1,5 @@
 from typing import List, Dict, Any, Optional
-from langchain_core.tools import BaseTool
+from langchain.tools import BaseTool
 from app.services.agent.tool_manager import ToolManager, MCPManager
 from app.services.agent.tool_approval import ToolApprovalManager
 from app.agent.tools.dify_tools import DifyToolManager

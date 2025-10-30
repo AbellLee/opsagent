@@ -15,6 +15,7 @@ class DifyAgentBase(BaseModel):
     capabilities: List[str] = Field(default_factory=list, description="能力标签列表")
     keywords: List[str] = Field(default_factory=list, description="关键词列表")
     config: Dict[str, Any] = Field(default_factory=dict, description="额外配置参数")
+    input_schema: Optional[Dict[str, Any]] = Field(None, description="inputs 参数的 Schema 定义")
     enabled: bool = Field(default=True, description="是否启用")
     priority: int = Field(default=0, description="优先级,数字越大优先级越高")
 
@@ -35,6 +36,7 @@ class DifyAgentUpdate(BaseModel):
     capabilities: Optional[List[str]] = None
     keywords: Optional[List[str]] = None
     config: Optional[Dict[str, Any]] = None
+    input_schema: Optional[Dict[str, Any]] = None
     enabled: Optional[bool] = None
     priority: Optional[int] = None
 
