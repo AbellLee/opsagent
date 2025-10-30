@@ -207,7 +207,7 @@ def _fix_incomplete_tool_calls(messages: List[BaseMessage]) -> List[BaseMessage]
 # 路由函数：should_continue
 # ========================
 def should_continue(state: AgentState) -> str:
-    """决定是否继续执行工具"""
+    """决定是否继续执行工具（兼容旧版本，无 Dify Agent 路由）"""
     messages = state["messages"]
     last_message = messages[-1]
 
@@ -224,9 +224,9 @@ def should_continue(state: AgentState) -> str:
 # 构建图：create_graph
 # ========================
 async def create_graph_async(checkpointer=None, store=None):
-    """创建 graph 图（异步版本 - 支持MCP工具加载）"""
+    """创建 graph 图（异步版本 - 支持MCP工具加载和Dify Agent工具）"""
     from app.agent.state import AgentState
-    from app.agent.tools import tool_manager, mcp_manager
+    from app.agent.tools import tool_manager, mcp_manager, dify_tool_manager
 
     builder = StateGraph(AgentState)
 
@@ -238,8 +238,12 @@ async def create_graph_async(checkpointer=None, store=None):
     mcp_tools = await mcp_manager.get_mcp_tools()
     logger.info(f"MCP工具数量: {len(mcp_tools)}")
 
+    # 异步加载 Dify Agent 工具
+    dify_tools = await dify_tool_manager.get_dify_tools()
+    logger.info(f"Dify Agent 工具数量: {len(dify_tools)}")
+
     # 合并所有工具
-    available_tools = custom_tools + mcp_tools
+    available_tools = custom_tools + mcp_tools + dify_tools
     logger.info(f"总工具数量: {len(available_tools)}")
 
     # 创建带工具的call_model函数
@@ -254,13 +258,14 @@ async def create_graph_async(checkpointer=None, store=None):
         logger.info("没有可用工具，不创建 ToolNode")
 
     # 添加节点
-    builder.add_node("agent", call_model_func)  # 使用带工具的函数
+    builder.add_node("agent", call_model_func)
     if tool_node:
         builder.add_node("tools", tool_node)
 
     # 设置入口
     builder.set_entry_point("agent")
 
+    # 添加条件边
     if tool_node:
         builder.add_conditional_edges(
             "agent",
@@ -274,6 +279,7 @@ async def create_graph_async(checkpointer=None, store=None):
     else:
         builder.add_edge("agent", END)
 
+    logger.info(f"Graph 构建完成")
     return builder.compile(checkpointer=checkpointer, store=store)
 
 

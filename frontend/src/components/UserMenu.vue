@@ -100,6 +100,13 @@
           </div>
           <div
             class="settings-nav-item"
+            :class="{ active: activeSettingsTab === 'dify' }"
+            @click="activeSettingsTab = 'dify'"
+          >
+            Dify Agent
+          </div>
+          <div
+            class="settings-nav-item"
             :class="{ active: activeSettingsTab === 'other' }"
             @click="activeSettingsTab = 'other'"
           >
@@ -110,6 +117,7 @@
         <!-- 右侧内容 -->
         <div class="settings-content">
           <MCPConfigPanel v-if="activeSettingsTab === 'mcp'" />
+          <DifyAgentPanel v-else-if="activeSettingsTab === 'dify'" />
           <div v-else-if="activeSettingsTab === 'other'" class="other-settings">
             <n-result status="info" title="其他设置" description="功能开发中...">
             </n-result>
@@ -139,6 +147,7 @@ import {
   NButton
 } from 'naive-ui'
 import MCPConfigPanel from './MCPConfigPanel.vue'
+import DifyAgentPanel from './DifyAgentPanel.vue'
 import { createDiscreteApi } from 'naive-ui'
 import {
   Person,

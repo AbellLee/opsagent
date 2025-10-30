@@ -167,6 +167,17 @@ export const taskAPI = {
 
 // 中断相关 API
 export const interruptAPI = {
-  interrupt: (sessionId, reason = "User requested interrupt") => 
+  interrupt: (sessionId, reason = "User requested interrupt") =>
     apiClient.post(`/sessions/${sessionId}/interrupt`, { reason })
+}
+
+// Dify Agent 相关 API
+export const difyAgentAPI = {
+  list: (enabledOnly = false) => apiClient.get(`/dify-agents${enabledOnly ? '?enabled_only=true' : ''}`),
+  create: (agentData) => apiClient.post('/dify-agents', agentData),
+  get: (agentId) => apiClient.get(`/dify-agents/${agentId}`),
+  update: (agentId, agentData) => apiClient.put(`/dify-agents/${agentId}`, agentData),
+  delete: (agentId) => apiClient.delete(`/dify-agents/${agentId}`),
+  test: (agentId, testData) => apiClient.post(`/dify-agents/${agentId}/test`, testData),
+  refreshCache: () => apiClient.post('/dify-agents/refresh-cache')
 }

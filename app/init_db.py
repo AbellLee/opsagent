@@ -110,7 +110,50 @@ def create_tables():
                 updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
             )
         """)
-        
+
+        # 创建 Dify Agent 配置表
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS dify_agents (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                name VARCHAR(255) NOT NULL,
+                description TEXT,
+                agent_type VARCHAR(50) NOT NULL,
+                dify_app_id VARCHAR(255) NOT NULL,
+                api_key VARCHAR(500) NOT NULL,
+                base_url VARCHAR(500) DEFAULT 'https://api.dify.ai/v1',
+                capabilities TEXT[],
+                keywords TEXT[],
+                config JSONB DEFAULT '{}',
+                enabled BOOLEAN DEFAULT true,
+                priority INTEGER DEFAULT 0,
+                created_by UUID REFERENCES users(user_id),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
+        # 创建 Dify Agent 索引
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_dify_agents_enabled
+            ON dify_agents(enabled)
+        """)
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_dify_agents_type
+            ON dify_agents(agent_type)
+        """)
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_dify_agents_priority
+            ON dify_agents(priority DESC)
+        """)
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_dify_agents_capabilities
+            ON dify_agents USING GIN(capabilities)
+        """)
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_dify_agents_keywords
+            ON dify_agents USING GIN(keywords)
+        """)
+
         # 提交事务
         conn.commit()
         logger.info("数据库表创建成功")

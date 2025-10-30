@@ -29,11 +29,11 @@ class Settings(BaseSettings):
     api_key: Optional[str] = os.getenv("API_KEY")
     debug: bool = os.getenv("DEBUG", "false").lower() == "true"
     log_level: str = os.getenv("LOG_LEVEL", "INFO")
-    
+
     # JWT配置（占位符，实际项目中需要配置）
     jwt_secret_key: str = "your-secret-key"
     jwt_algorithm: str = "HS256"
-    
+
     model_config = ConfigDict(env_file=".env", extra="ignore")
 
 # 全局配置实例

@@ -3,6 +3,66 @@ from typing import List, Optional, Dict, Any
 from datetime import datetime
 from uuid import UUID
 
+# Dify Agent 相关模型
+class DifyAgentBase(BaseModel):
+    """Dify Agent 基础模型"""
+    name: str = Field(..., min_length=1, max_length=255, description="Agent 名称")
+    description: Optional[str] = Field(None, description="Agent 描述")
+    agent_type: str = Field(..., description="Agent 类型: chatbot, workflow, agent")
+    dify_app_id: str = Field(..., description="Dify 平台的 App ID")
+    api_key: str = Field(..., description="Dify API Key")
+    base_url: str = Field(default="https://api.dify.ai/v1", description="Dify API 基础 URL")
+    capabilities: List[str] = Field(default_factory=list, description="能力标签列表")
+    keywords: List[str] = Field(default_factory=list, description="关键词列表")
+    config: Dict[str, Any] = Field(default_factory=dict, description="额外配置参数")
+    enabled: bool = Field(default=True, description="是否启用")
+    priority: int = Field(default=0, description="优先级,数字越大优先级越高")
+
+
+class DifyAgentCreate(DifyAgentBase):
+    """创建 Dify Agent 请求模型"""
+    pass
+
+
+class DifyAgentUpdate(BaseModel):
+    """更新 Dify Agent 请求模型"""
+    name: Optional[str] = Field(None, min_length=1, max_length=255)
+    description: Optional[str] = None
+    agent_type: Optional[str] = None
+    dify_app_id: Optional[str] = None
+    api_key: Optional[str] = None
+    base_url: Optional[str] = None
+    capabilities: Optional[List[str]] = None
+    keywords: Optional[List[str]] = None
+    config: Optional[Dict[str, Any]] = None
+    enabled: Optional[bool] = None
+    priority: Optional[int] = None
+
+
+class DifyAgentResponse(DifyAgentBase):
+    """Dify Agent 响应模型"""
+    id: UUID
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class DifyAgentTestRequest(BaseModel):
+    """测试 Dify Agent 请求模型"""
+    query: str = Field(..., description="测试查询")
+    user_id: Optional[str] = Field(default="test_user", description="测试用户 ID")
+
+
+class DifyAgentTestResponse(BaseModel):
+    """测试 Dify Agent 响应模型"""
+    success: bool
+    response: Optional[str] = None
+    error: Optional[str] = None
+    latency_ms: Optional[float] = None
+
+
 # 用户相关模型
 class UserCreate(BaseModel):
     username: str = Field(..., min_length=3, max_length=50)

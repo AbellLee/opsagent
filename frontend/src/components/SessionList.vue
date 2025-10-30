@@ -21,7 +21,7 @@
         </div>
       </template>
     </div>
-    
+
     <n-scrollbar class="session-list-scroll">
       <n-list hoverable clickable>
         <n-list-item 
