@@ -1,6 +1,7 @@
 from typing import Dict, Any, Optional, List
 from langchain_core.messages import ToolMessage, AIMessage, HumanMessage, SystemMessage, BaseMessage
-from langchain_core.tools import BaseTool
+# from langchain_core.tools import BaseTool
+from langchain.tools import tool
 from langgraph.graph import StateGraph, END
 from langgraph.store.base import BaseStore
 from langgraph.prebuilt import ToolNode
@@ -15,7 +16,7 @@ import os
 # ========================
 # 异步节点函数：call_model
 # ========================
-def create_call_model_with_tools(tools: List[BaseTool]):
+def create_call_model_with_tools(tools: List[tool]):
     """创建带工具的call_model函数（闭包）"""
 
     async def call_model(

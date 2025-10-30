@@ -2,7 +2,7 @@
 Agent服务相关的工具函数
 """
 from typing import List, Dict, Any
-from uuid import UUID
+from uuid import UUID, uuid4
 from langchain_core.messages import HumanMessage, AIMessage, ToolMessage, SystemMessage
 from app.core.logger import logger
 
@@ -41,8 +41,12 @@ def get_session_messages_from_db(db, session_id: UUID) -> List:
         return []
 
 
-def build_agent_inputs(message: str, session_id: UUID, user_id: str = "default_user") -> Dict[str, Any]:
+def build_agent_inputs(message: str, session_id: UUID, user_id: str = None) -> Dict[str, Any]:
     """构造Agent输入数据"""
+    # 如果没有提供user_id，则生成一个临时的UUID
+    if user_id is None:
+        user_id = str(uuid4())
+        
     return {
         "messages": [
             HumanMessage(content=message.strip())
