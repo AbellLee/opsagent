@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 
 from app.core.config import settings
 from app.core.logger import logger
+# 直接从旧的 schemas.py 文件导入
 from app.models.schemas import MCPServerConfig, MCPServerConfigCreate, MCPServerConfigUpdate
 
 

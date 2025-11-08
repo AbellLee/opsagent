@@ -19,11 +19,13 @@ class User(BaseModel):
 # 会话相关模型
 class SessionCreate(BaseModel):
     user_id: UUID
+    llm_config_id: Optional[UUID] = Field(None, description="LLM配置ID，为空时使用默认配置")
 
 class Session(BaseModel):
     session_id: UUID
     user_id: UUID
     session_name: str = "新建对话"
+    llm_config_id: Optional[UUID] = None
     created_at: datetime
     expires_at: datetime
 
@@ -56,11 +58,12 @@ class AgentChatRequest(BaseModel):
     """Agent聊天请求模型"""
     message: str
     response_mode: str = Field(
-        default="blocking", 
+        default="blocking",
         description="响应模式：blocking为阻塞模式，streaming为流式模式"
     )
     tools: Optional[List[str]] = None
     config: Optional[Dict[str, Any]] = None
+    files: Optional[List[Dict[str, Any]]] = Field(None, description="上传的文件列表，支持图片等多模态内容")
 
 
 class ChatCompletionResponse(BaseModel):
@@ -117,3 +120,40 @@ class MCPStdioConfig(BaseModel):
 class MCPHttpConfig(BaseModel):
     url: str = Field(..., description="HTTP服务器URL")
     transport: str = Field("streamable_http", description="传输协议")
+
+
+# Dify API 兼容模型
+class DifyChatRequest(BaseModel):
+    """Dify聊天请求模型"""
+    inputs: Optional[Dict[str, Any]] = Field(default_factory=dict, description="输入变量")
+    query: str = Field(..., description="用户输入的消息内容")
+    response_mode: str = Field(
+        default="blocking",
+        description="响应模式：blocking为阻塞模式，streaming为流式模式"
+    )
+    conversation_id: Optional[str] = Field(None, description="会话ID，为空时创建新会话")
+    user: str = Field(..., description="用户标识")
+    files: Optional[List[Dict[str, Any]]] = Field(None, description="上传的文件列表")
+    model_config_id: Optional[str] = Field(None, description="LLM配置ID，为空时使用默认配置")
+
+
+class DifyChatResponse(BaseModel):
+    """Dify聊天响应模型（阻塞模式）"""
+    event: str = Field(default="message", description="事件类型")
+    message_id: str = Field(..., description="消息ID")
+    conversation_id: str = Field(..., description="会话ID")
+    mode: str = Field(default="chat", description="应用模式")
+    answer: str = Field(..., description="AI回复内容")
+    metadata: Dict[str, Any] = Field(default_factory=dict, description="元数据")
+    created_at: int = Field(..., description="创建时间戳")
+
+
+class DifyStreamResponse(BaseModel):
+    """Dify流式响应模型"""
+    event: str = Field(..., description="事件类型：message, agent_message, agent_thought, message_end等")
+    task_id: Optional[str] = Field(None, description="任务ID")
+    message_id: Optional[str] = Field(None, description="消息ID")
+    conversation_id: str = Field(..., description="会话ID")
+    answer: Optional[str] = Field(None, description="回复内容片段")
+    created_at: Optional[int] = Field(None, description="创建时间戳")
+    metadata: Optional[Dict[str, Any]] = Field(None, description="元数据")

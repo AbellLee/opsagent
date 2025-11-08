@@ -54,7 +54,12 @@
 
             <!-- 文本回复项 -->
             <div v-else-if="item.type === 'text'" class="text-response-item">
-              <div class="text-content" v-html="parseMarkdown(item.content)"></div>
+              <div class="text-content" v-html="parseMarkdown(item.content || item.text || '')"></div>
+            </div>
+
+            <!-- 图片项 -->
+            <div v-else-if="item.type === 'image_url'" class="image-item">
+              <img :src="getImageUrl(item)" alt="图片" class="message-image" />
             </div>
           </div>
         </div>
@@ -237,6 +242,20 @@ const getToolStatusClass = (status) => {
     default:
       return 'status-unknown'
   }
+}
+
+const getImageUrl = (item) => {
+  // 支持两种格式:
+  // 1. { type: 'image_url', image_url: { url: '...' } }
+  // 2. { type: 'image_url', image_url: '...' }
+  if (item.image_url) {
+    if (typeof item.image_url === 'string') {
+      return item.image_url
+    } else if (item.image_url.url) {
+      return item.image_url.url
+    }
+  }
+  return ''
 }
 
 const copyToClipboard = async () => {
@@ -1084,6 +1103,24 @@ onMounted(() => {
   font-size: 14px;
   line-height: 1.6;
   color: #333;
+}
+
+.image-item {
+  padding: 8px 0;
+}
+
+.message-image {
+  max-width: 100%;
+  max-height: 400px;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  cursor: pointer;
+  transition: transform 0.2s ease;
+}
+
+.message-image:hover {
+  transform: scale(1.02);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
 }
 
 /* 兼容性样式保留 */

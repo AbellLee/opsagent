@@ -91,9 +91,9 @@ async def chat_with_agent(
         
         # 设置用户上下文
         set_user_context(str(user_id), str(session_id))
-        
-        # 构造输入和配置
-        inputs = build_agent_inputs(request.message, session_id, str(user_id))
+
+        # 构造输入和配置(支持多模态内容)
+        inputs = build_agent_inputs(request.message, session_id, str(user_id), request.files)
         config = create_agent_config(session_id)
 
         # 根据响应模式选择处理方式

@@ -2,6 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 import LoginView from '../views/LoginView.vue'
 import RegisterView from '../views/RegisterView.vue'
 import ChatView from '../views/ChatView.vue'
+import LLMConfigView from '../views/LLMConfigView.vue'
 
 const routes = [
   {
@@ -24,6 +25,12 @@ const routes = [
     path: '/chat',
     name: 'Chat',
     component: ChatView,
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/llm-config',
+    name: 'LLMConfig',
+    component: LLMConfigView,
     meta: { requiresAuth: true }
   }
 ]

@@ -1,8 +1,54 @@
 <template>
   <div class="message-input-wrapper">
     <div class="input-container">
+      <!-- 图片预览区域 -->
+      <div v-if="uploadedImages.length > 0" class="image-preview-container">
+        <div v-for="(image, index) in uploadedImages" :key="index" class="image-preview-item">
+          <img :src="image.url" alt="预览图片" class="preview-image" />
+          <n-button
+            text
+            size="tiny"
+            class="remove-image-btn"
+            @click="removeImage(index)"
+          >
+            <n-icon size="16">
+              <svg viewBox="0 0 24 24" fill="currentColor">
+                <path d="M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41,19L12,13.41L17.59,19L19,17.59L13.41,12L19,6.41Z"/>
+              </svg>
+            </n-icon>
+          </n-button>
+        </div>
+      </div>
+
       <!-- 输入框 -->
       <div class="textarea-wrapper">
+        <!-- 图片上传按钮 -->
+        <div class="upload-button-wrapper">
+          <input
+            ref="fileInputRef"
+            type="file"
+            accept="image/*"
+            multiple
+            style="display: none"
+            @change="handleFileSelect"
+          />
+          <n-button
+            text
+            size="small"
+            @click="triggerFileInput"
+            class="upload-button"
+            :disabled="sending"
+          >
+            <template #icon>
+              <n-icon size="20">
+                <svg viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M21,19V5C21,3.89 20.1,3 19,3H5A2,2 0 0,0 3,5V19A2,2 0 0,0 5,21H19A2,2 0 0,0 21,19M8.5,13.5L11,16.5L14.5,12L19,18H5L8.5,13.5Z"/>
+                </svg>
+              </n-icon>
+            </template>
+          </n-button>
+        </div>
+
         <n-input
           ref="inputRef"
           v-model:value="inputValue"
@@ -116,6 +162,8 @@ const sessionStore = useSessionStore()
 const inputValue = ref('')
 const sending = ref(false)
 const inputRef = ref(null)
+const fileInputRef = ref(null)
+const uploadedImages = ref([])
 const responseMode = ref('streaming') // 默认使用流式模式
 
 // Configuration
@@ -124,7 +172,9 @@ const placeholder = ref('有什么我能帮您的吗？')
 
 // Computed properties
 const isSendDisabled = computed(() => {
-  return !inputValue.value?.trim() || sending.value || isOverLimit.value
+  // 如果有图片,即使没有文本也可以发送
+  const hasContent = inputValue.value?.trim() || uploadedImages.value.length > 0
+  return !hasContent || sending.value || isOverLimit.value
 })
 
 const isNearLimit = computed(() => {
@@ -173,6 +223,60 @@ const handleKeyDown = (event) => {
   }
 }
 
+// 图片上传相关方法
+const triggerFileInput = () => {
+  fileInputRef.value?.click()
+}
+
+const handleFileSelect = async (event) => {
+  const files = event.target.files
+  if (!files || files.length === 0) return
+
+  for (const file of files) {
+    // 检查文件类型
+    if (!file.type.startsWith('image/')) {
+      notification.warning(`文件 ${file.name} 不是图片格式`)
+      continue
+    }
+
+    // 检查文件大小 (限制为 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      notification.warning(`图片 ${file.name} 大小超过 5MB`)
+      continue
+    }
+
+    try {
+      // 将图片转换为 base64
+      const base64 = await fileToBase64(file)
+      uploadedImages.value.push({
+        type: 'image',
+        url: base64,
+        data: base64,
+        name: file.name
+      })
+    } catch (error) {
+      console.error('读取图片失败:', error)
+      notification.error(`读取图片 ${file.name} 失败`)
+    }
+  }
+
+  // 清空文件输入
+  event.target.value = ''
+}
+
+const fileToBase64 = (file) => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(reader.result)
+    reader.onerror = reject
+    reader.readAsDataURL(file)
+  })
+}
+
+const removeImage = (index) => {
+  uploadedImages.value.splice(index, 1)
+}
+
 // Methods
 const createMessage = (type, content, extraProps = {}) => ({
   id: Date.now() + Math.random(), // 生成唯一ID
@@ -188,27 +292,55 @@ const sendMessage = async () => {
   if (isSendDisabled.value) return
 
   const messageContent = inputValue.value.trim()
-  if (!messageContent) return
+  const images = [...uploadedImages.value]
+
+  // 至少要有文本或图片
+  if (!messageContent && images.length === 0) return
 
   try {
     sending.value = true
 
+    // 创建用户消息内容(支持多模态)
+    let userMessageContent
+    if (images.length > 0) {
+      // 多模态消息: 构建内容数组
+      userMessageContent = []
+      if (messageContent) {
+        userMessageContent.push({
+          type: 'text',
+          text: messageContent  // 使用 text 字段,符合 LangChain 标准
+        })
+      }
+      images.forEach(img => {
+        userMessageContent.push({
+          type: 'image_url',
+          image_url: {
+            url: img.url
+          }
+        })
+      })
+    } else {
+      // 纯文本消息
+      userMessageContent = messageContent
+    }
+
     // 创建并添加用户消息
-    const userMessage = createMessage(MESSAGE_TYPES.USER, messageContent)
+    const userMessage = createMessage(MESSAGE_TYPES.USER, userMessageContent)
     sessionStore.addMessage(userMessage)
 
-    // 清空输入框
+    // 清空输入框和图片
     inputValue.value = ''
+    uploadedImages.value = []
 
     // 通知父组件滚动到底部
     emit('send')
 
     if (responseMode.value === 'streaming') {
       // 流式模式
-      await sendStreamingMessage(messageContent)
+      await sendStreamingMessage(messageContent, images)
     } else {
       // 阻塞模式
-      await sendBlockingMessage(messageContent)
+      await sendBlockingMessage(messageContent, images)
     }
 
   } catch (error) {
@@ -218,6 +350,7 @@ const sendMessage = async () => {
     // 错误时恢复输入内容
     if (!inputValue.value.trim()) {
       inputValue.value = messageContent
+      uploadedImages.value = images
     }
   } finally {
     sending.value = false
@@ -237,14 +370,24 @@ const interruptMessage = async () => {
 }
 
 // 阻塞模式发送消息
-const sendBlockingMessage = async (messageContent) => {
+const sendBlockingMessage = async (messageContent, images = []) => {
   // 确保WebSocket连接正常
   await ensureWebSocketConnection()
-  
-  const response = await messageAPI.send(sessionStore.sessionId, {
-    message: messageContent,
+
+  const requestData = {
+    message: messageContent || '',
     response_mode: 'blocking'
-  })
+  }
+
+  // 如果有图片,添加 files 字段
+  if (images.length > 0) {
+    requestData.files = images.map(img => ({
+      type: 'image',
+      data: img.data
+    }))
+  }
+
+  const response = await messageAPI.send(sessionStore.sessionId, requestData)
 
   // 处理结构化消息数据
   if (response.response && typeof response.response === 'object') {
@@ -261,26 +404,36 @@ const sendBlockingMessage = async (messageContent) => {
 }
 
 // 流式模式发送消息
-const sendStreamingMessage = async (messageContent) => {
+const sendStreamingMessage = async (messageContent, images = []) => {
   // 确保WebSocket连接正常
   await ensureWebSocketConnection()
-  
+
   // 不再预先创建消息，而是根据流式数据动态创建
 
   // 通知开始流式输入
   emit('streaming-start')
 
   try {
+    const requestData = {
+      message: messageContent || '',
+      response_mode: 'streaming'
+    }
+
+    // 如果有图片,添加 files 字段
+    if (images.length > 0) {
+      requestData.files = images.map(img => ({
+        type: 'image',
+        data: img.data
+      }))
+    }
+
     // 先发送POST请求启动流式响应
     const response = await fetch(`/api/sessions/${sessionStore.sessionId}/chat`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        message: messageContent,
-        response_mode: 'streaming'
-      })
+      body: JSON.stringify(requestData)
     })
 
     if (!response.ok) {
@@ -508,6 +661,58 @@ onMounted(() => {
   transform: translateY(-1px);
 }
 
+/* 图片预览容器 */
+.image-preview-container {
+  display: flex;
+  gap: 8px;
+  padding: 12px;
+  background: #f8fafc;
+  border-bottom: 1px solid #e2e8f0;
+  flex-wrap: wrap;
+}
+
+.image-preview-item {
+  position: relative;
+  width: 80px;
+  height: 80px;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 2px solid #e2e8f0;
+  transition: all 0.2s ease;
+}
+
+.image-preview-item:hover {
+  border-color: #667eea;
+  transform: scale(1.05);
+}
+
+.preview-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.remove-image-btn {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  background: rgba(239, 68, 68, 0.9);
+  color: white;
+  border-radius: 50%;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.image-preview-item:hover .remove-image-btn {
+  opacity: 1;
+}
+
 /* 输入框容器 */
 .textarea-wrapper {
   position: relative;
@@ -516,6 +721,26 @@ onMounted(() => {
   border-radius: 12px 12px 0 0;
   transition: all 0.3s ease;
   padding: 4px;
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+/* 上传按钮 */
+.upload-button-wrapper {
+  padding: 8px 0 8px 8px;
+  display: flex;
+  align-items: center;
+}
+
+.upload-button {
+  color: #667eea;
+  transition: all 0.2s ease;
+}
+
+.upload-button:hover:not(:disabled) {
+  color: #5a67d8;
+  transform: scale(1.1);
 }
 
 .textarea-wrapper:focus-within {
@@ -523,8 +748,8 @@ onMounted(() => {
 }
 
 .message-textarea {
-  width: 100%;
-  padding: 16px 60px 16px 16px;
+  flex: 1;
+  padding: 16px 60px 16px 8px;
   border: none;
   background: transparent;
   resize: none;

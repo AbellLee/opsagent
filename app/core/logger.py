@@ -1,5 +1,5 @@
 import logging
-from app.core.config import settings
+from .config import settings
 
 def setup_logger():
     """设置日志配置"""

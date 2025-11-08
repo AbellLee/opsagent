@@ -10,12 +10,17 @@
           <AppSidebar v-if="userStore.isAuthenticated" />
 
           <n-layout-content class="main-content-area">
-            <!-- 只有在已登录且没有选择会话时显示欢迎页面 -->
-            <WelcomeView v-if="userStore.isAuthenticated && (!sessionStore.sessionId || sessionStore.sessionId === '')" />
-            <!-- 已登录且有会话时显示聊天视图 -->
-            <ChatView v-else-if="userStore.isAuthenticated && sessionStore.sessionId" />
             <!-- 未登录时显示路由视图（登录/注册页面） -->
-            <router-view v-else />
+            <router-view v-if="!userStore.isAuthenticated" />
+            <!-- 已登录时根据路由显示不同页面 -->
+            <template v-else>
+              <!-- LLM 配置页面 -->
+              <router-view v-if="$route.path === '/llm-config'" />
+              <!-- 聊天页面：没有选择会话时显示欢迎页面 -->
+              <WelcomeView v-else-if="!sessionStore.sessionId || sessionStore.sessionId === ''" />
+              <!-- 聊天页面：有会话时显示聊天视图 -->
+              <ChatView v-else />
+            </template>
           </n-layout-content>
         </n-layout>
       </n-layout>

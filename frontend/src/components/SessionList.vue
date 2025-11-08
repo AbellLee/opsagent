@@ -1,5 +1,19 @@
 <template>
   <div class="session-list-container">
+    <!-- 导航菜单 -->
+    <div class="nav-menu">
+      <n-menu
+        v-model:value="activeMenu"
+        :collapsed="collapsed"
+        :collapsed-width="64"
+        :collapsed-icon-size="22"
+        :options="menuOptions"
+        @update:value="handleMenuSelect"
+      />
+    </div>
+
+    <n-divider style="margin: 8px 0;" />
+
     <div class="session-list-header">
       <!-- 展开状态 -->
       <template v-if="!collapsed">
@@ -69,11 +83,35 @@
         <n-button @click="confirmRenameSession" size="small" type="primary">确定</n-button>
       </template>
     </n-modal>
+
+    <!-- 新建会话对话框 -->
+    <n-modal
+      v-model:show="showNewSessionDialog"
+      preset="card"
+      title="新建会话"
+      style="width: 500px"
+    >
+      <n-space vertical>
+        <n-form-item label="选择模型">
+          <ModelSelector
+            v-model="selectedModelId"
+            :is-embedding="false"
+          />
+        </n-form-item>
+        <n-space justify="end">
+          <n-button @click="showNewSessionDialog = false">取消</n-button>
+          <n-button type="primary" @click="confirmCreateSession">
+            创建
+          </n-button>
+        </n-space>
+      </n-space>
+    </n-modal>
   </div>
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, h } from 'vue'
+import { useRouter } from 'vue-router'
 import { useUserStore } from '../stores/user'
 import { useSessionStore } from '../stores/session'
 import { sessionAPI } from '../api'
@@ -86,14 +124,23 @@ import {
   NModal,
   NInput,
   NEllipsis,
-  NDropdown
+  NDropdown,
+  NMenu,
+  NDivider,
+  NSpace,
+  NFormItem
 } from 'naive-ui'
 import { createDiscreteApi } from 'naive-ui'
 import {
   Add,
   ChatboxEllipses,
-  EllipsisVertical
+  EllipsisVertical,
+  ChatbubbleEllipsesOutline,
+  SettingsOutline
 } from '@vicons/ionicons5'
+import ModelSelector from './ModelSelector.vue'
+
+const router = useRouter()
 
 // Props
 const props = defineProps({
@@ -107,10 +154,40 @@ const userStore = useUserStore()
 const sessionStore = useSessionStore()
 const { message } = createDiscreteApi(['message'])
 
+// 导航菜单状态
+const activeMenu = ref('chat')
+
+// 导航菜单选项
+const menuOptions = [
+  {
+    label: '聊天',
+    key: 'chat',
+    icon: () => h(NIcon, null, { default: () => h(ChatbubbleEllipsesOutline) })
+  },
+  {
+    label: 'LLM 配置',
+    key: 'llm-config',
+    icon: () => h(NIcon, null, { default: () => h(SettingsOutline) })
+  }
+]
+
+// 处理菜单选择
+const handleMenuSelect = (key) => {
+  if (key === 'chat') {
+    router.push('/chat')
+  } else if (key === 'llm-config') {
+    router.push('/llm-config')
+  }
+}
+
 // 会话操作相关状态
 const showRenameModal = ref(false)
 const sessionToRename = ref(null)
 const newSessionName = ref('')
+
+// 新建会话相关状态
+const showNewSessionDialog = ref(false)
+const selectedModelId = ref(null)
 
 // 会话操作选项
 const sessionOptions = [
@@ -124,23 +201,37 @@ const sessionOptions = [
   }
 ]
 
-// 创建新会话
-const createNewSession = async () => {
+// 创建新会话（打开对话框）
+const createNewSession = () => {
+  selectedModelId.value = null
+  showNewSessionDialog.value = true
+}
+
+// 确认创建会话
+const confirmCreateSession = async () => {
   try {
-    const response = await sessionAPI.create({
+    const sessionData = {
       user_id: userStore.user?.user_id || 'default_user'
-    })
-    
+    }
+
+    // 如果选择了模型，添加到请求中
+    if (selectedModelId.value) {
+      sessionData.llm_config_id = selectedModelId.value
+    }
+
+    const response = await sessionAPI.create(sessionData)
+
     sessionStore.addSession(response)
     sessionStore.setSessionId(response.session_id)
-    
+
     // 加载新创建的会话消息（初始为空）
     sessionStore.setMessages([])
-    
+
+    showNewSessionDialog.value = false
     message.success('新会话创建成功')
   } catch (error) {
     console.error('创建新会话失败:', error)
-    message.error('创建新会话失败')
+    message.error('创建新会话失败: ' + (error.response?.data?.detail || error.message))
   }
 }
 
@@ -232,6 +323,12 @@ const formatTime = (time) => {
   flex-direction: column;
 }
 
+/* 导航菜单 */
+.nav-menu {
+  padding: 12px 8px;
+  flex-shrink: 0;
+}
+
 /* 会话列表头部美化 */
 .session-list-header {
   display: flex;
@@ -248,7 +345,7 @@ const formatTime = (time) => {
   min-height: 80px;
   max-height: 80px;
   box-sizing: border-box;
-  border-radius: var(--border-radius-lg) var(--border-radius-lg) 0 0;
+  border-radius: 0;
 }
 
 .session-list-header::before {

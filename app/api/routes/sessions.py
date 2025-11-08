@@ -15,25 +15,43 @@ def create_session(session_create: SessionCreate, db = Depends(get_db)):
         session_id = uuid4()
         created_at = datetime.now()
         expires_at = created_at + timedelta(hours=24)  # 24小时后过期
-        
+
+        # 验证 LLM 配置（如果提供）
+        llm_config_id = None
+        if session_create.llm_config_id:
+            cursor = db.cursor()
+            cursor.execute(
+                "SELECT id FROM llm_configs WHERE id = %s AND is_active = true",
+                (str(session_create.llm_config_id),)
+            )
+            if not cursor.fetchone():
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="指定的LLM配置不存在或未激活"
+                )
+            llm_config_id = str(session_create.llm_config_id)
+
         # 插入数据库
         cursor = db.cursor()
         cursor.execute(
             """
-            INSERT INTO user_sessions (session_id, user_id, session_name, created_at, expires_at)
-            VALUES (%s, %s, %s, %s, %s)
+            INSERT INTO user_sessions (session_id, user_id, session_name, llm_config_id, created_at, expires_at)
+            VALUES (%s, %s, %s, %s, %s, %s)
             """,
-            (str(session_id), str(session_create.user_id), "新建对话", created_at, expires_at)
+            (str(session_id), str(session_create.user_id), "新建对话", llm_config_id, created_at, expires_at)
         )
         db.commit()
-        
+
         return Session(
             session_id=session_id,
             user_id=session_create.user_id,
             session_name="新建对话",
+            llm_config_id=session_create.llm_config_id,
             created_at=created_at,
             expires_at=expires_at
         )
+    except HTTPException:
+        raise
     except Exception as e:
         db.rollback()
         raise HTTPException(
@@ -48,26 +66,27 @@ def get_session(session_id: UUID, db = Depends(get_db)):
         cursor = db.cursor()
         cursor.execute(
             """
-            SELECT session_id, user_id, session_name, created_at, expires_at
+            SELECT session_id, user_id, session_name, llm_config_id, created_at, expires_at
             FROM user_sessions
             WHERE session_id = %s
             """,
             (str(session_id),)
         )
         row = cursor.fetchone()
-        
+
         if not row:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="会话不存在"
             )
-            
+
         return Session(
             session_id=row[0] if isinstance(row[0], UUID) else UUID(row[0]),
             user_id=row[1] if isinstance(row[1], UUID) else UUID(row[1]),
             session_name=row[2],
-            created_at=row[3],
-            expires_at=row[4]
+            llm_config_id=row[3] if row[3] else None,
+            created_at=row[4],
+            expires_at=row[5]
         )
     except HTTPException:
         raise
@@ -161,7 +180,7 @@ def list_sessions(user_id: UUID = Query(...), db = Depends(get_db)):
         cursor = db.cursor()
         cursor.execute(
             """
-            SELECT session_id, user_id, session_name, created_at, expires_at
+            SELECT session_id, user_id, session_name, llm_config_id, created_at, expires_at
             FROM user_sessions
             WHERE user_id = %s
             ORDER BY created_at DESC
@@ -169,17 +188,18 @@ def list_sessions(user_id: UUID = Query(...), db = Depends(get_db)):
             (str(user_id),)
         )
         rows = cursor.fetchall()
-        
+
         sessions = []
         for row in rows:
             sessions.append(Session(
                 session_id=row[0] if isinstance(row[0], UUID) else UUID(row[0]),
                 user_id=row[1] if isinstance(row[1], UUID) else UUID(row[1]),
                 session_name=row[2],
-                created_at=row[3],
-                expires_at=row[4]
+                llm_config_id=row[3] if row[3] else None,
+                created_at=row[4],
+                expires_at=row[5]
             ))
-            
+
         return sessions
     except Exception as e:
         raise HTTPException(

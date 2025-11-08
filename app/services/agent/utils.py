@@ -41,12 +41,58 @@ def get_session_messages_from_db(db, session_id: UUID) -> List:
         return []
 
 
-def build_agent_inputs(message: str, session_id: UUID, user_id: str = "default_user") -> Dict[str, Any]:
-    """构造Agent输入数据"""
+def build_agent_inputs(message: str, session_id: UUID, user_id: str = "default_user", files: List[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """构造Agent输入数据,支持多模态内容(文本+图片)
+
+    Args:
+        message: 文本消息内容
+        session_id: 会话ID
+        user_id: 用户ID
+        files: 文件列表,每个文件包含 type 和 url/data 字段
+               例如: [{"type": "image", "url": "https://..."}, {"type": "image", "data": "base64..."}]
+
+    Returns:
+        包含消息和配置的字典
+    """
+    # 构建消息内容
+    if files and len(files) > 0:
+        # 多模态消息: 文本 + 图片
+        content = []
+
+        # 添加文本内容
+        if message and message.strip():
+            content.append({
+                "type": "text",
+                "text": message.strip()
+            })
+
+        # 添加图片内容
+        for file in files:
+            if file.get("type") == "image":
+                # 支持 URL 或 base64 数据
+                if "url" in file:
+                    content.append({
+                        "type": "image_url",
+                        "image_url": {
+                            "url": file["url"]
+                        }
+                    })
+                elif "data" in file:
+                    # base64 格式: data:image/jpeg;base64,/9j/4AAQ...
+                    content.append({
+                        "type": "image_url",
+                        "image_url": {
+                            "url": file["data"]
+                        }
+                    })
+
+        human_message = HumanMessage(content=content)
+    else:
+        # 纯文本消息
+        human_message = HumanMessage(content=message.strip())
+
     return {
-        "messages": [
-            HumanMessage(content=message.strip())
-        ],
+        "messages": [human_message],
         "user_id": user_id,
         "session_id": str(session_id),
         "tool_approval_required": False,

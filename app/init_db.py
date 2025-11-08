@@ -56,13 +56,75 @@ def create_tables():
                 updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
             )
         """)
-        
+
+        # 创建 LLM 配置表（必须在 user_sessions 之前创建，因为有外键引用）
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS llm_configs (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                name VARCHAR(100) NOT NULL UNIQUE,
+                provider VARCHAR(50) NOT NULL,
+                model_name VARCHAR(100) NOT NULL,
+                api_key VARCHAR(500),
+                base_url VARCHAR(200),
+                max_tokens INTEGER NOT NULL DEFAULT 2048,
+                temperature FLOAT NOT NULL DEFAULT 0.7,
+                top_p FLOAT NOT NULL DEFAULT 1.0,
+                frequency_penalty FLOAT NOT NULL DEFAULT 0.0,
+                presence_penalty FLOAT NOT NULL DEFAULT 0.0,
+                description TEXT,
+                is_active BOOLEAN NOT NULL DEFAULT TRUE,
+                is_default BOOLEAN NOT NULL DEFAULT FALSE,
+                is_embedding BOOLEAN NOT NULL DEFAULT FALSE,
+                extra_config JSONB,
+                usage_count INTEGER NOT NULL DEFAULT 0,
+                last_used_at TIMESTAMP WITH TIME ZONE,
+                created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+                updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+                created_by UUID,
+                updated_by UUID,
+                CONSTRAINT check_provider CHECK (provider IN ('openai', 'deepseek', 'tongyi', 'ollama', 'vllm', 'doubao', 'zhipu', 'moonshot', 'baidu'))
+            )
+        """)
+
+        # 创建 LLM 配置表索引
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_llm_configs_provider ON llm_configs(provider)
+        """)
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_llm_configs_is_active ON llm_configs(is_active)
+        """)
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_llm_configs_is_default_embedding ON llm_configs(is_default, is_embedding)
+        """)
+
+        # 创建更新时间触发器函数（如果不存在）
+        cursor.execute("""
+            CREATE OR REPLACE FUNCTION update_updated_at_column()
+            RETURNS TRIGGER AS $$
+            BEGIN
+                NEW.updated_at = NOW();
+                RETURN NEW;
+            END;
+            $$ language 'plpgsql'
+        """)
+
+        # 为 llm_configs 表创建触发器
+        cursor.execute("""
+            DROP TRIGGER IF EXISTS update_llm_configs_updated_at ON llm_configs
+        """)
+        cursor.execute("""
+            CREATE TRIGGER update_llm_configs_updated_at
+            BEFORE UPDATE ON llm_configs
+            FOR EACH ROW EXECUTE FUNCTION update_updated_at_column()
+        """)
+
         # 创建用户会话关系表
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS user_sessions (
                 session_id UUID PRIMARY KEY,
                 session_name VARCHAR(100) NOT NULL DEFAULT '新建对话',
                 user_id UUID NOT NULL REFERENCES users(user_id),
+                llm_config_id UUID REFERENCES llm_configs(id),
                 created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 expires_at TIMESTAMP NOT NULL,
                 UNIQUE(session_id, user_id)
@@ -110,7 +172,7 @@ def create_tables():
                 updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
             )
         """)
-        
+
         # 提交事务
         conn.commit()
         logger.info("数据库表创建成功")

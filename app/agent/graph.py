@@ -12,6 +12,48 @@ from langgraph.types import interrupt
 import os
 
 
+def get_llm_from_config(config: RunnableConfig):
+    """
+    从配置中获取 LLM 实例
+
+    优先级：
+    1. 如果配置中指定了 model_config_id，使用数据库配置
+    2. 否则使用默认的 get_llm()（环境变量配置）
+
+    Args:
+        config: LangGraph 配置对象
+
+    Returns:
+        tuple: (llm, embedding) LLM 和嵌入模型实例
+    """
+    model_config_id = config.get("configurable", {}).get("model_config_id")
+
+    if model_config_id:
+        # 使用数据库配置
+        try:
+            from app.core.llm_manager import LLMManager
+            from app.db.session import get_db_sqlalchemy
+            from uuid import UUID
+
+            # 获取数据库会话
+            db = next(get_db_sqlalchemy())
+            try:
+                llm_manager = LLMManager(db)
+                config_id = UUID(model_config_id)
+                llm, embedding = llm_manager.get_llm_and_embedding(chat_config_id=config_id)
+                logger.info(f"使用数据库LLM配置: {model_config_id}")
+                return llm, embedding
+            finally:
+                db.close()
+        except Exception as e:
+            logger.warning(f"使用数据库配置失败: {e}，回退到默认配置")
+            # 回退到默认配置
+            return get_llm()
+    else:
+        # 使用默认配置（环境变量）
+        return get_llm()
+
+
 # ========================
 # 异步节点函数：call_model
 # ========================
@@ -49,9 +91,9 @@ def create_call_model_with_tools(tools: List[BaseTool]):
                 if info:
                     system_msg = f"你是一个智能助手。相关信息: {info}"
 
-            # 初始化 LLM
+            # 初始化 LLM（支持从配置中读取 model_config_id）
             try:
-                llm, _ = get_llm()
+                llm, _ = get_llm_from_config(config)
             except LLMInitializationError as e:
                 logger.error(f"LLM初始化失败: {e}")
                 # 即使LLM初始化失败，也要返回状态，确保中断时能看到部分结果

@@ -167,6 +167,52 @@ export const taskAPI = {
 
 // 中断相关 API
 export const interruptAPI = {
-  interrupt: (sessionId, reason = "User requested interrupt") => 
+  interrupt: (sessionId, reason = "User requested interrupt") =>
     apiClient.post(`/sessions/${sessionId}/interrupt`, { reason })
+}
+
+// LLM 配置相关 API
+export const llmConfigAPI = {
+  // 获取所有配置
+  list: (params = {}) => {
+    const queryParams = new URLSearchParams()
+    if (params.provider) queryParams.append('provider', params.provider)
+    if (params.is_active !== undefined) queryParams.append('is_active', params.is_active)
+    if (params.is_embedding !== undefined) queryParams.append('is_embedding', params.is_embedding)
+    if (params.search) queryParams.append('search', params.search)
+    const queryString = queryParams.toString()
+    return apiClient.get(`/llm-configs/${queryString ? '?' + queryString : ''}`)
+  },
+
+  // 获取支持的提供商列表
+  getProviders: () => apiClient.get('/llm-configs/providers'),
+
+  // 获取激活的配置
+  getActive: (isEmbedding = false) =>
+    apiClient.get(`/llm-configs/active?is_embedding=${isEmbedding}`),
+
+  // 获取默认配置
+  getDefault: (isEmbedding = false) =>
+    apiClient.get(`/llm-configs/default?is_embedding=${isEmbedding}`),
+
+  // 获取单个配置
+  get: (configId) => apiClient.get(`/llm-configs/${configId}`),
+
+  // 创建配置
+  create: (configData) => apiClient.post('/llm-configs/', configData),
+
+  // 更新配置
+  update: (configId, configData) => apiClient.put(`/llm-configs/${configId}`, configData),
+
+  // 删除配置
+  delete: (configId) => apiClient.delete(`/llm-configs/${configId}`),
+
+  // 切换激活状态
+  toggleStatus: (configId) => apiClient.post(`/llm-configs/${configId}/toggle-status`),
+
+  // 设置为默认
+  setDefault: (configId) => apiClient.post(`/llm-configs/${configId}/set-default`),
+
+  // 测试配置
+  test: (configId, testData) => apiClient.post(`/llm-configs/${configId}/test`, testData)
 }

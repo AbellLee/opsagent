@@ -12,6 +12,7 @@
 - ⏹️ 对话中断处理机制
 - 🌐 RESTful API接口
 - 🖥️ 基于Vue3和Naive UI的前端界面
+- 🔌 **Dify API 兼容** - 支持 Dify API 规范，可与 Dify 客户端无缝集成
 
 ## 技术栈
 
@@ -214,6 +215,13 @@ npm run serve
 - `DELETE /api/mcp-configs/{config_id}` - 删除MCP配置
 - `POST /api/mcp-configs/{config_id}/enable` - 启用MCP配置
 - `POST /api/mcp-configs/{config_id}/disable` - 禁用MCP配置
+
+### Dify 兼容 API
+- `POST /v1/chat-messages` - 发送聊天消息（兼容 Dify API）
+- `GET /v1/conversations/{conversation_id}` - 获取会话信息
+- `DELETE /v1/conversations/{conversation_id}` - 删除会话
+
+详细的 Dify API 使用文档请参考：[Dify API 兼容性文档](docs/DIFY_API_COMPATIBILITY.md)
 
 ## 数据库表结构
 
