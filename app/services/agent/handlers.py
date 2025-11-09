@@ -1,25 +1,54 @@
 """
 Agent服务的核心业务逻辑处理
 """
-from typing import Dict, Any
+from typing import Dict, Any, Optional, List
 from uuid import UUID
 import time
 import uuid
 from datetime import datetime
 from fastapi.responses import StreamingResponse
 from langchain_core.messages import HumanMessage, AIMessage, ToolMessage
+from langchain_core.tools import BaseTool
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from langgraph.store.postgres.aio import AsyncPostgresStore
 
-from app.core.logger import logger
+from app.core.logger import get_logger
 from app.core.config import settings
 from app.agent.graph import create_graph_async
 from app.models.schemas import ChatCompletionResponse, ChunkChatCompletionResponse
 from app.services.agent.utils import build_agent_inputs, create_agent_config
 
+# 使用模块级logger
+logger = get_logger("services.agent.handlers")
 
-async def execute_agent_task(session_id: UUID, message: str, tools=None, config=None) -> Dict[str, Any]:
-    """执行Agent任务的核心业务逻辑"""
+
+async def execute_agent_task(
+    session_id: UUID,
+    message: str,
+    tools: Optional[List[BaseTool]] = None,
+    config: Optional[Dict[str, Any]] = None
+) -> Dict[str, Any]:
+    """执行Agent任务的核心业务逻辑
+
+    Args:
+        session_id: 会话ID
+        message: 用户消息内容
+        tools: 可用工具列表，默认为None（使用默认工具）
+        config: Agent配置字典，默认为None（使用默认配置）
+
+    Returns:
+        包含以下字段的字典：
+        - session_id: 会话ID
+        - response: AI响应内容
+        - status: 执行状态 ("success" | "error")
+
+    Example:
+        >>> result = await execute_agent_task(
+        ...     session_id=UUID("..."),
+        ...     message="Hello, how are you?"
+        ... )
+        >>> print(result["response"])
+    """
     # 构造输入
     inputs = build_agent_inputs(message, session_id)
 
@@ -50,8 +79,24 @@ async def execute_agent_task(session_id: UUID, message: str, tools=None, config=
     }
 
 
-async def handle_blocking_chat(session_id: UUID, inputs: Dict[str, Any], config: Dict[str, Any]) -> ChatCompletionResponse:
-    """处理阻塞模式的聊天 - 使用LangGraph标准流程"""
+async def handle_blocking_chat(
+    session_id: UUID,
+    inputs: Dict[str, Any],
+    config: Dict[str, Any]
+) -> ChatCompletionResponse:
+    """处理阻塞模式的聊天 - 使用LangGraph标准流程
+
+    Args:
+        session_id: 会话ID
+        inputs: Agent输入数据，包含messages等字段
+        config: LangGraph配置对象，包含thread_id等
+
+    Returns:
+        ChatCompletionResponse对象，包含完整的响应信息
+
+    Raises:
+        Exception: 当Agent执行失败时
+    """
     # 使用异步上下文管理器
     async with (
         AsyncPostgresStore.from_conn_string(settings.database_url) as store,
