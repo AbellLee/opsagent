@@ -21,19 +21,19 @@ logger = get_logger("agent.nodes")
 
 def create_call_model_with_tools(tools: List[BaseTool]):
     """创建带工具的call_model函数（闭包）
-    
+
     Args:
         tools: 可用工具列表
-    
+
     Returns:
         call_model函数，用作LangGraph的节点函数
-    
+
     Example:
         >>> tools = [SearchTool(), WeatherTool()]
         >>> call_model = create_call_model_with_tools(tools)
         >>> builder.add_node("agent", call_model)
     """
-    
+
     async def call_model(
         state: AgentState,
         config: RunnableConfig,
@@ -170,14 +170,37 @@ def create_call_model_with_tools(tools: List[BaseTool]):
             except Exception as stream_error:
                 # 回退到异步普通调用
                 logger.info(f"非流式上下文或流式调用失败，回退到 ainvoke: {stream_error}")
-                ai_message = await model_with_tools.ainvoke(messages)
-                logger.info("异步模型调用成功")
-            
+
+                # 检查是否是通义千问的已知 bug
+                error_msg = str(stream_error)
+                if "list index out of range" in error_msg and "tool_calls" in error_msg:
+                    logger.warning("检测到通义千问 tool_calls bug，尝试不使用工具重新调用")
+                    # 使用不带工具的模型重试
+                    try:
+                        ai_message = await llm.ainvoke(messages)
+                        logger.info("使用无工具模型调用成功")
+                    except Exception as retry_error:
+                        logger.error(f"重试失败: {retry_error}")
+                        raise stream_error
+                else:
+                    ai_message = await model_with_tools.ainvoke(messages)
+                    logger.info("异步模型调用成功")
+
             return {"messages": [ai_message]}
-        
+
         except Exception as e:
             logger.error(f"调用模型失败: {e}", exc_info=True)
-            return {"messages": [AIMessage(content=f"模型调用失败: {str(e)}")]}
-    
+
+            # 提供更友好的错误消息
+            error_type = type(e).__name__
+            if "ConnectionError" in error_type or "ConnectionResetError" in str(e):
+                error_msg = "模型调用失败: 网络连接中断，请稍后重试"
+            elif "list index out of range" in str(e):
+                error_msg = "模型调用失败: 模型响应格式错误（已知的通义千问 bug）"
+            else:
+                error_msg = f"模型调用失败: {str(e)}"
+
+            return {"messages": [AIMessage(content=error_msg)]}
+
     return call_model
 

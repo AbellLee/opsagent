@@ -31,7 +31,7 @@ def _get_db_connection():
 
 def _check_user_exists(cursor, user_id: str) -> bool:
     """检查用户是否存在"""
-    cursor.execute("SELECT 1 FROM users WHERE id = %s", (user_id,))
+    cursor.execute("SELECT 1 FROM users WHERE user_id = %s", (user_id,))
     return cursor.fetchone() is not None
 
 def _check_session_exists(cursor, session_id: str, user_id: str) -> bool:

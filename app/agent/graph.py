@@ -6,6 +6,7 @@ from typing import Any, Optional
 from langgraph.graph import StateGraph, END
 from langgraph.store.base import BaseStore
 from langgraph.prebuilt import ToolNode
+from langchain_core.runnables import RunnableConfig
 
 from app.core.logger import get_logger
 from app.agent.state import AgentState
